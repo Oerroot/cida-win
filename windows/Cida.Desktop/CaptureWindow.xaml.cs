@@ -1,0 +1,162 @@
+using Cida.Core;
+using Cida.Platform;
+using System.IO;
+using System.Windows.Media.Imaging;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+
+
+
+
+
+namespace Cida.Desktop;
+
+/// <summary>
+/// The frozen-screen capture flow: full-screen borderless windows show the frozen shot,
+/// the user drags a rectangle, and the crop goes to local OCR. Ported from upstream
+/// CaptureOverlay.swift.
+/// </summary>
+public sealed class CaptureWindow : Window
+{
+    private readonly AppModel _model;
+    private readonly ScreenCapturer _capturer;
+    private readonly LocalOcr _ocr;
+    private readonly Border _veil = new() { Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(96, 248, 247, 244)) };
+    private readonly Border _selection = new()
+    {
+        BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xB4, 0x55, 0x2D)),
+        BorderThickness = new Thickness(1.5),
+        Background = Brushes.Transparent,
+    };
+    private ScreenCapturer.CapturedScreen _frozen = null!;
+    private System.Windows.Point _start;
+    private bool _dragging;
+
+    public CaptureWindow(AppModel model, ScreenCapturer capturer, LocalOcr ocr)
+    {
+        _model = model;
+        _capturer = capturer;
+        _ocr = ocr;
+        WindowStyle = WindowStyle.None;
+        ResizeMode = ResizeMode.NoResize;
+        ShowInTaskbar = false;
+        Topmost = true;
+        ShowActivated = true;
+        Cursor = System.Windows.Input.Cursors.Cross;
+        Background = System.Windows.Media.Brushes.Black;
+
+        var canvas = new Canvas();
+        canvas.Children.Add(_veil);
+        canvas.Children.Add(_selection);
+        Content = canvas;
+
+        Loaded += OnLoaded;
+        MouseLeftButtonDown += OnMouseDown;
+        MouseMove += OnMouseMove;
+        MouseLeftButtonUp += OnMouseUp;
+        KeyDown += (_, arguments) =>
+        {
+            if (arguments.Key == Key.Escape)
+            {
+                arguments.Handled = true;
+                Close();
+            }
+        };
+        Deactivated += (_, _) => Close();
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs arguments)
+    {
+        // Freeze the screen that holds the cursor; the panel of frozen pixels is this
+        // window's background.
+        var position = System.Windows.Forms.Cursor.Position;
+        var screen = System.Windows.Forms.Screen.FromPoint(position);
+        _frozen = _capturer.Capture(screen.Bounds);
+
+        Left = screen.Bounds.Left;
+        Top = screen.Bounds.Top;
+        Width = screen.Bounds.Width;
+        Height = screen.Bounds.Height;
+
+        var source = new BitmapImage();
+        source.BeginInit();
+        source.StreamSource = new MemoryStream(_frozen.Pixels);
+        source.CacheOption = BitmapCacheOption.OnLoad;
+        source.EndInit();
+        source.Freeze();
+        Background = new ImageBrush(source);
+
+        _veil.Width = Width;
+        _veil.Height = Height;
+        Canvas.SetLeft(_veil, 0);
+        Canvas.SetTop(_veil, 0);
+    }
+
+    private void OnMouseDown(object sender, MouseButtonEventArgs arguments)
+    {
+        _dragging = true;
+        _start = arguments.GetPosition(this);
+        _selection.Width = 0;
+        _selection.Height = 0;
+        Canvas.SetLeft(_selection, _start.X);
+        Canvas.SetTop(_selection, _start.Y);
+        CaptureMouse();
+    }
+
+    private void OnMouseMove(object sender, System.Windows.Input.MouseEventArgs arguments)
+    {
+        if (!_dragging) return;
+        var position = arguments.GetPosition(this);
+        var left = Math.Min(_start.X, position.X);
+        var top = Math.Min(_start.Y, position.Y);
+        _selection.Width = Math.Abs(position.X - _start.X);
+        _selection.Height = Math.Abs(position.Y - _start.Y);
+        Canvas.SetLeft(_selection, left);
+        Canvas.SetTop(_selection, top);
+    }
+
+    private async void OnMouseUp(object sender, MouseButtonEventArgs arguments)
+    {
+        if (!_dragging) return;
+        _dragging = false;
+        ReleaseMouseCapture();
+        if (_selection.Width < 4 || _selection.Height < 4)
+        {
+            Close();
+            return;
+        }
+
+        // Crop the frozen image in screen coordinates.
+        var cropLeft = (int)Math.Max(0, Canvas.GetLeft(_selection) - 0);
+        var cropTop = (int)Math.Max(0, Canvas.GetTop(_selection) - 0);
+        var cropWidth = (int)_selection.Width;
+        var cropHeight = (int)_selection.Height;
+        var crop = CropPng(_frozen, cropLeft, cropTop, cropWidth, cropHeight);
+        Close();
+
+        var lines = await Task.Run(() => _ocr.RecognizeAsync(crop, cropWidth, cropHeight));
+        if (lines == null || lines.Count == 0)
+        {
+            System.Windows.MessageBox.Show("截图里没有识别到文字（或本机没有可用的文字识别语言包）。", "辞达",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+            return;
+        }
+        var paragraphs = Cida.Platform.RecognizedLayout.Paragraphs(lines);
+        var text = string.Join("\n\n", paragraphs.Select(paragraph => paragraph.Text));
+        _model.SubmitCapture(text);
+    }
+
+    private static byte[] CropPng(ScreenCapturer.CapturedScreen frozen, int x, int y, int width, int height)
+    {
+        using var source = new System.Drawing.Bitmap(new MemoryStream(frozen.Pixels));
+        using var crop = source.Clone(
+            new System.Drawing.Rectangle(x, y, width, height), source.PixelFormat);
+        using var memory = new MemoryStream();
+        crop.Save(memory, System.Drawing.Imaging.ImageFormat.Png);
+        return memory.ToArray();
+    }
+}
