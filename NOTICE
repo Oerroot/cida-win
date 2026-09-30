@@ -1,0 +1,11 @@
+Cida (Windows) — 辞达 Windows 版
+Copyright 2026 Cida Windows contributors
+
+This product includes software developed as part of Cida (辞达)
+by Xuanwo and contributors (https://github.com/Xuanwo/cida),
+licensed under the Apache License, Version 2.0.
+
+The macOS original's product semantics, protocol behavior, prompt
+contract and interaction design were studied and reimplemented for
+Windows in C# / .NET / WPF. No source code from the original
+repository is included in this project.
