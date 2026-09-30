@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [feat/windows]
+    branches: [main]
   pull_request:
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
 
   package:
     needs: test
-    if: github.ref == 'refs/heads/feat/windows'
+    if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
