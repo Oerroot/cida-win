@@ -226,9 +226,9 @@ public sealed record CidaSettings
         [JsonPropertyName("myLanguage")] public string? MyLanguage { get; set; }
         [JsonPropertyName("foreignLanguage")] public string? ForeignLanguage { get; set; }
         [JsonPropertyName("launchAtLogin")] public bool? LaunchAtLogin { get; set; }
-        [JsonPropertyName("shortcut")] public GlobalShortcutContract? Shortcut { get; set; }
-        [JsonPropertyName("captureShortcut")] public GlobalShortcutContract? CaptureShortcut { get; set; }
-        [JsonPropertyName("layerShortcut")] public GlobalShortcutContract? LayerShortcut { get; set; }
+        [JsonPropertyName("shortcut"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] public GlobalShortcutContract? Shortcut { get; set; }
+        [JsonPropertyName("captureShortcut"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] public GlobalShortcutContract? CaptureShortcut { get; set; }
+        [JsonPropertyName("layerShortcut"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] public GlobalShortcutContract? LayerShortcut { get; set; }
         [JsonPropertyName("promptContractVersion")] public int? PromptContractVersion { get; set; }
 
         // 1.0's provider preset, model and custom endpoint; read once to build modelService.

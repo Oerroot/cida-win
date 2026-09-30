@@ -17,6 +17,8 @@ jobs:
         run: dotnet build windows --configuration Release
       - name: Test
         run: dotnet test tests/Cida.Core.Tests --configuration Release --no-build
+      - name: Windows ABI tests
+        run: dotnet test tests/Cida.Windows.Tests --configuration Release --no-build
 
   package:
     needs: test

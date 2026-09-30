@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\Cida.Core\Cida.Core.csproj" />
@@ -10,7 +10,7 @@
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <OutputType>Exe</OutputType>
-    <AssemblyName>cida</AssemblyName>
+    <AssemblyName>Cida.Cli</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>Cida.Cli</RootNamespace>
     <Nullable>enable</Nullable>

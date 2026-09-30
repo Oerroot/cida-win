@@ -1,0 +1,61 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validate tag and release notes
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+)$') { throw 'Expected tag vMAJOR.MINOR.PATCH' }
+          $version = $Matches[1]
+          if (-not (Test-Path "docs/releases/$tag.md")) { throw 'Release notes missing' }
+          "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+      - name: Build
+        run: dotnet build windows --configuration Release
+      - name: Core tests
+        run: dotnet test tests/Cida.Core.Tests --configuration Release --no-build
+      - name: Windows ABI tests
+        run: dotnet test tests/Cida.Windows.Tests --configuration Release --no-build
+      - name: Install vpk
+        run: dotnet tool install -g vpk --version 1.2.161
+      - name: Package
+        run: powershell -File scripts/package.ps1 -Version $env:RELEASE_VERSION
+      - name: Checksums
+        shell: pwsh
+        run: |
+          $dir = "artifacts/release/$env:RELEASE_VERSION"
+          Get-ChildItem $dir -File | Sort-Object Name | ForEach-Object {
+            "$( (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() )  $($_.Name)"
+          } | Set-Content "$dir/SHA256SUMS.txt" -Encoding utf8NoBOM
+      - name: Publish pre-release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $dir = "artifacts/release/$env:RELEASE_VERSION"
+          $assets = @(Get-ChildItem $dir -File | ForEach-Object FullName)
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host 'Release already exists; preserving its verified assets.'
+          } else {
+            gh release create $tag @assets --repo $env:GITHUB_REPOSITORY --verify-tag --prerelease --title "辞达 Cida Windows $tag（预发布）" --notes-file "docs/releases/$tag.md"
+            if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
+          }

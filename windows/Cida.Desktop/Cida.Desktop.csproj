@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\Cida.Core\Cida.Core.csproj" />
@@ -15,6 +15,7 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <OutputType>WinExe</OutputType>
+    <StartupObject>Cida.Desktop.Program</StartupObject>
     <AssemblyName>Cida</AssemblyName>
     <RootNamespace>Cida.Desktop</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -23,6 +24,6 @@
 
 
   <ItemGroup>
-    <Content Include="SparsePackage\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="SparsePackage\AppxManifest.xml;SparsePackage\Assets\**\*;SparsePackage\build\CidaWinIdentity.msix;SparsePackage\build\CidaIdentity.cer" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

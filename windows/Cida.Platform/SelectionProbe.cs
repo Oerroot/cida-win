@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Cida.Platform;
 
-namespace Cida.Cli;
+namespace Cida.Platform;
 
 /// <summary>
 /// The P0 probe: reports, for every visible top-level window, how the selection reader
@@ -20,7 +20,7 @@ public static class SelectionProbe
         while (true)
         {
             Console.Write("按回车检查当前可见窗口（Ctrl+C 退出）…");
-            Console.ReadLine();
+            if (Console.ReadLine() == null) return;
             var rows = new List<(string Window, string Kind, string Strategy, string Excerpt)>();
             foreach (var (handle, title) in VisibleWindows())
             {

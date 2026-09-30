@@ -47,14 +47,18 @@ public sealed class LayerOverlayWindow : Window
         Content = paper;
 
         // Place over the paragraph; grow past its width rather than clip the meaning.
-        Left = bounds.Left - 2;
-        Top = bounds.Top - 2;
-        Width = Math.Max(bounds.Width + 4, 200);
         MaxHeight = 320;
         SizeToContent = SizeToContent.Height;
 
-        SourceInitialized += (_, _) => MakeClickThrough();
+        SourceInitialized += (_, _) =>
+        {
+            MakeClickThrough();
+            MoveToBounds(bounds);
+        };
     }
+
+    public void MoveToBounds(System.Drawing.RectangleF bounds) => WindowPlacement.Overlay(this, bounds);
+    public void SetText(string text) => _text.Text = text;
 
     /// <summary>Appends a streamed piece of the translation.</summary>
     public void Append(string piece) => _text.Text += piece;

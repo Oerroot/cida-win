@@ -29,14 +29,15 @@ public sealed class AppModel
     private SettingsWindow? _settingsWindow;
     private readonly TranslationLayer _layer = new();
     private LayerOverlayWindow? _layerOverlay;
+    private CancellationTokenSource? _layerCancellation;
     private LayerSession? _layerSession;
     private System.Windows.Forms.NotifyIcon? _tray;
     private CidaSettings _settings;
     private int _resultSerial;
 
-    public AppModel()
+    public AppModel(ConfigurationStore? store = null)
     {
-        _store = Cida.Platform.PlatformConfiguration.Production();
+        _store = store ?? Cida.Platform.PlatformConfiguration.Production();
         _settings = _store.LoadSettings() with { ApiKey = _store.ReadApiKey() ?? "" };
         _client = new ModelServiceClient();
     }
@@ -58,7 +59,9 @@ public sealed class AppModel
     public void Stop()
     {
         _shutdown.Cancel();
-        _hotkeyPressedSubscription = null;
+        _layerCancellation?.Cancel();
+        _layerOverlay?.Close();
+        _layerSession?.Dispose();
         _hotkeys.Dispose();
         _panel?.Close();
         _capture?.Close();
@@ -93,6 +96,7 @@ public sealed class AppModel
         Register(_settings.Shortcut, GlobalHotkeySource.GlobalShortcutActionMirror.ShowPanel);
         Register(_settings.CaptureShortcut, GlobalHotkeySource.GlobalShortcutActionMirror.CaptureText);
         Register(_settings.LayerShortcut, GlobalHotkeySource.GlobalShortcutActionMirror.TranslationLayer);
+        Register(_settings.LayerShortcut?.AddingShift(), GlobalHotkeySource.GlobalShortcutActionMirror.WholeWindowTranslationLayer);
         _hotkeys.HotkeyPressed -= OnHotkey;
         _hotkeys.HotkeyPressed += OnHotkey;
     }
@@ -108,8 +112,6 @@ public sealed class AppModel
         }
     }
 
-    private Action<GlobalHotkeySource.GlobalShortcutActionMirror>? _hotkeyPressedSubscription;
-
     private void OnHotkey(GlobalHotkeySource.GlobalShortcutActionMirror action)
     {
         Dispatcher.BeginInvoke(() =>
@@ -123,7 +125,10 @@ public sealed class AppModel
                     StartCapture();
                     break;
                 case GlobalHotkeySource.GlobalShortcutActionMirror.TranslationLayer:
-                    ToggleLayer(KeyboardState.ShiftIsDown());
+                    ToggleLayer(false);
+                    break;
+                case GlobalHotkeySource.GlobalShortcutActionMirror.WholeWindowTranslationLayer:
+                    ToggleLayer(true);
                     break;
             }
         });
@@ -135,19 +140,24 @@ public sealed class AppModel
 
     private void TogglePanel()
     {
-        if (_panel == null || !_panel.IsLoaded)
-        {
-            _panel = new PanelWindow(this);
-            _panel.Show();
-            return;
-        }
-        if (_panel.IsVisible)
+        if (_panel?.IsVisible == true)
         {
             _panel.Hide();
             return;
         }
-        _panel.Show();
-        _panel.Activate();
+        RememberSourceWindow();
+        ShowPanel(readSelection: true);
+    }
+
+    private void ShowPanel(bool readSelection)
+    {
+        if (_panel == null || !_panel.IsLoaded)
+        {
+            _panel = new PanelWindow(this);
+            _panel.Show();
+        }
+        else _panel.Show();
+        if (readSelection) _ = _panel.BringInSelectionAsync();
     }
 
     public void ShowSettings()
@@ -228,29 +238,26 @@ public sealed class AppModel
                 _settings.ModelService.Format,
                 new SecretRedactor(_settings.ApiKey),
                 null,
-                piece =>
+                piece => Dispatcher.BeginInvoke(() =>
                 {
-                    if (serial == _resultSerial)
-                    {
-                        Dispatcher.BeginInvoke(() => panel.AppendResult(piece));
-                    }
-                },
+                    if (serial == _resultSerial && !cancellation.IsCancellationRequested) panel.AppendResult(piece);
+                }),
                 cancellation.Token);
-            Dispatcher.BeginInvoke(() =>
+            await Dispatcher.InvokeAsync(() =>
             {
                 if (serial == _resultSerial) panel.CompleteResult();
             });
         }
         catch (ModelServiceException error)
         {
-            Dispatcher.BeginInvoke(() =>
+            await Dispatcher.InvokeAsync(() =>
             {
                 if (serial == _resultSerial) panel.FailResult(error.Error.Description());
             });
         }
         catch (OperationCanceledException)
         {
-            Dispatcher.BeginInvoke(() =>
+            await Dispatcher.InvokeAsync(() =>
             {
                 if (serial == _resultSerial) panel.StopResult();
             });
@@ -269,31 +276,41 @@ public sealed class AppModel
     /// <summary>The capture window calls this with the recognized text.</summary>
     public void SubmitCapture(string text)
     {
-        TogglePanel();
+        ShowPanel(readSelection: false);
         if (_panel != null)
         {
+            _panel.SetSourceText(text);
             Submit(_panel, text, ProcessingMode.Translate);
         }
     }
 
     // MARK: translation layer (pointer paragraph)
 
-    private void ToggleLayer(bool wholeWindow)
+    private async void ToggleLayer(bool wholeWindow)
     {
+        var wasSameLayer = wholeWindow ? _layerSession != null : _layerOverlay != null || _layerCancellation != null;
         // The whole-window variant (Alt+Shift+D) and the paragraph variant close each other.
         _layerOverlay?.Close();
         _layerOverlay = null;
+        _layerCancellation?.Cancel();
+        _layerCancellation = null;
         _layerSession?.Dispose();
+        if (wasSameLayer) return;
         if (!wholeWindow)
         {
-            var paragraph = Task.Run(() => _layer.ParagraphUnderCursor()).Result;
+            var cancellation = new CancellationTokenSource();
+            _layerCancellation = cancellation;
+            var paragraph = await Task.Run(() => _layer.ParagraphUnderCursor());
+            if (cancellation.IsCancellationRequested) { cancellation.Dispose(); return; }
             if (paragraph == null)
             {
+                _layerCancellation = null;
+                cancellation.Dispose();
                 // No readable paragraph under the pointer: the panel remains the fallback.
                 TogglePanel();
                 return;
             }
-            TranslateInPlace(paragraph);
+            TranslateInPlace(paragraph, cancellation);
             return;
         }
         var window = Cida.Platform.WindowParagraphReader.ForegroundWindow();
@@ -314,10 +331,12 @@ public sealed class AppModel
         }
     }
 
-    private void TranslateInPlace(TranslationLayer.LayerParagraph paragraph)
+    private async void TranslateInPlace(TranslationLayer.LayerParagraph paragraph, CancellationTokenSource cancellation)
     {
         if (!_settings.IsModelServiceComplete)
         {
+            _layerCancellation = null;
+            cancellation.Dispose();
             TogglePanel();
             return;
         }
@@ -333,10 +352,7 @@ public sealed class AppModel
             MyLanguage = languages.My,
             ForeignLanguage = languages.Foreign,
         };
-        var serial = _resultSerial;
-        Task.Run(async () =>
-        {
-            try
+        try
             {
                 var prepared = ModelServiceClient.Prepare(request, _settings);
                 await _client.SendAsync(
@@ -347,11 +363,11 @@ public sealed class AppModel
                     piece => Dispatcher.BeginInvoke(() =>
                     {
                         if (_layerOverlay == overlay) overlay.Append(piece);
-                    }));
+                    }), cancellation.Token);
             }
-            catch (ModelServiceException error)
+            catch (ModelServiceException)
             {
-                Dispatcher.BeginInvoke(() =>
+                await Dispatcher.InvokeAsync(() =>
                 {
                     if (_layerOverlay == overlay)
                     {
@@ -360,9 +376,13 @@ public sealed class AppModel
                         TogglePanel();
                     }
                 });
-                _ = error;
             }
-        });
+        catch (OperationCanceledException) { }
+        finally
+        {
+            if (ReferenceEquals(_layerCancellation, cancellation)) _layerCancellation = null;
+            cancellation.Dispose();
+        }
     }
 
     // MARK: tray

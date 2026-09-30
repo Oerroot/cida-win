@@ -31,7 +31,7 @@ public sealed class WindowParagraphReader
     public IReadOnlyList<Paragraph> ReadVisibleParagraphs(nint window)
     {
         _window = window;
-        _elements = new Dictionary<string, System.Windows.Automation.AutomationElement>();
+        var remembered = new Dictionary<string, System.Windows.Automation.AutomationElement>();
         var paragraphs = new List<Paragraph>();
         try
         {
@@ -65,7 +65,7 @@ public sealed class WindowParagraphReader
                         continue;
                     }
                     var runtimeId = element.GetRuntimeId();
-                    _elements[Key(runtimeId)] = element;
+                    remembered[Key(runtimeId)] = element;
                     paragraphs.Add(new Paragraph(
                         runtimeId,
                         text,
@@ -92,6 +92,8 @@ public sealed class WindowParagraphReader
         catch (System.InvalidOperationException)
         {
         }
+        // Publish a completed map so the UI poll never enumerates a map being populated.
+        Interlocked.Exchange(ref _elements, remembered);
         return paragraphs.OrderBy(paragraph => paragraph.Bounds.Top)
             .ThenBy(paragraph => paragraph.Bounds.Left)
             .ToList();

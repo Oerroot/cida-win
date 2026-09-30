@@ -14,11 +14,16 @@ public partial class App : System.Windows.Application
 {
     private AppModel _model = null!;
 
-    protected override void OnStartup(System.Windows.StartupEventArgs e)
+    protected override async void OnStartup(System.Windows.StartupEventArgs e)
     {
-        // Velopack's hook: handles install/update/uninstall events; no-op unpackaged.
-        Velopack.VelopackApp.Build().Run();
         base.OnStartup(e);
+        if (e.Args.Length > 0)
+        {
+            ConsoleBridge.AttachParent();
+            var code = await CommandLineHost.RunAsync(e.Args);
+            Shutdown(code);
+            return;
+        }
         _model = new AppModel();
         _model.Start();
     }

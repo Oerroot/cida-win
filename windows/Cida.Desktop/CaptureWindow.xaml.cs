@@ -23,7 +23,6 @@ namespace Cida.Desktop;
 public sealed class CaptureWindow : Window
 {
     private readonly AppModel _model;
-    private readonly ScreenCapturer _capturer;
     private readonly LocalOcr _ocr;
     private readonly Border _veil = new() { Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(96, 248, 247, 244)) };
     private readonly Border _selection = new()
@@ -39,8 +38,10 @@ public sealed class CaptureWindow : Window
     public CaptureWindow(AppModel model, ScreenCapturer capturer, LocalOcr ocr)
     {
         _model = model;
-        _capturer = capturer;
         _ocr = ocr;
+        // Capture before this topmost window is visible, so the image cannot include itself.
+        var screen = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Cursor.Position);
+        _frozen = capturer.Capture(screen.Bounds);
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
@@ -53,6 +54,8 @@ public sealed class CaptureWindow : Window
         canvas.Children.Add(_veil);
         canvas.Children.Add(_selection);
         Content = canvas;
+
+        SourceInitialized += (_, _) => WindowPlacement.Cover(this, _frozen.Bounds);
 
         Loaded += OnLoaded;
         MouseLeftButtonDown += OnMouseDown;
@@ -71,16 +74,7 @@ public sealed class CaptureWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs arguments)
     {
-        // Freeze the screen that holds the cursor; the panel of frozen pixels is this
-        // window's background.
-        var position = System.Windows.Forms.Cursor.Position;
-        var screen = System.Windows.Forms.Screen.FromPoint(position);
-        _frozen = _capturer.Capture(screen.Bounds);
-
-        Left = screen.Bounds.Left;
-        Top = screen.Bounds.Top;
-        Width = screen.Bounds.Width;
-        Height = screen.Bounds.Height;
+        WindowPlacement.Cover(this, _frozen.Bounds);
 
         var source = new BitmapImage();
         source.BeginInit();
@@ -130,12 +124,12 @@ public sealed class CaptureWindow : Window
             return;
         }
 
-        // Crop the frozen image in screen coordinates.
-        var cropLeft = (int)Math.Max(0, Canvas.GetLeft(_selection) - 0);
-        var cropTop = (int)Math.Max(0, Canvas.GetTop(_selection) - 0);
-        var cropWidth = (int)_selection.Width;
-        var cropHeight = (int)_selection.Height;
-        var crop = CropPng(_frozen, cropLeft, cropTop, cropWidth, cropHeight);
+        var pixels = CaptureCoordinates.Crop(Canvas.GetLeft(_selection), Canvas.GetTop(_selection),
+            _selection.Width, _selection.Height, ActualWidth, ActualHeight, _frozen.Width, _frozen.Height);
+        if (pixels.Width == 0 || pixels.Height == 0) { Close(); return; }
+        var cropWidth = pixels.Width;
+        var cropHeight = pixels.Height;
+        var crop = CropPng(_frozen, pixels.X, pixels.Y, cropWidth, cropHeight);
         Close();
 
         var lines = await Task.Run(() => _ocr.RecognizeAsync(crop, cropWidth, cropHeight));

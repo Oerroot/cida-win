@@ -93,7 +93,8 @@ public enum ModelStreamEventKind
 /// </summary>
 public sealed class ModelServiceClient(HttpClient? httpClient = null)
 {
-    public HttpClient Session { get; } = httpClient ?? new HttpClient();
+    private static readonly HttpClient SharedSession = new() { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
+    public HttpClient Session { get; } = httpClient ?? SharedSession;
 
     public bool IsConfigured(CidaSettings settings) => settings.IsModelServiceComplete;
 
@@ -128,6 +129,34 @@ public sealed class ModelServiceClient(HttpClient? httpClient = null)
         Action<string>? onText = null,
         CancellationToken cancellationToken = default)
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(prepared.Timeout);
+        try
+        {
+            await SendCoreAsync(prepared, format, redactor, transcript, onText, deadline.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new ModelServiceException(ModelServiceErrorInfo.Transport(new TimeoutException("请求超时")));
+        }
+        catch (HttpRequestException error)
+        {
+            throw new ModelServiceException(ModelServiceErrorInfo.Transport(error));
+        }
+        catch (IOException error)
+        {
+            throw new ModelServiceException(ModelServiceErrorInfo.Transport(error));
+        }
+    }
+
+    private async Task SendCoreAsync(
+        PreparedModelRequest prepared,
+        ModelRequestFormat format,
+        SecretRedactor redactor,
+        ModelResponseTranscript? transcript,
+        Action<string>? onText,
+        CancellationToken cancellationToken)
+    {
         onText ??= _ => { };
         HttpResponseMessage response;
         try
@@ -150,7 +179,7 @@ public sealed class ModelServiceClient(HttpClient? httpClient = null)
             transcript?.Record((int)response.StatusCode);
             if (!response.IsSuccessStatusCode)
             {
-                var text = redactor.Redact(await CollectText(response));
+                var text = redactor.Redact(await CollectText(response, cancellationToken));
                 transcript?.Append(text);
                 throw new ModelServiceException(ModelServiceErrorInfo.Http(
                     (int)response.StatusCode,
@@ -166,7 +195,7 @@ public sealed class ModelServiceClient(HttpClient? httpClient = null)
             }
             else
             {
-                var text = await CollectText(response);
+                var text = await CollectText(response, cancellationToken);
                 transcript?.Append(redactor.Redact(text));
                 var document = JsonValue.Parse(text);
                 if (document == null)
@@ -191,20 +220,21 @@ public sealed class ModelServiceClient(HttpClient? httpClient = null)
                     throw new ModelServiceException(
                         new ModelServiceErrorInfo(ModelServiceError.EmptyResult));
                 }
+                cancellationToken.ThrowIfCancellationRequested();
                 onText(reply);
             }
         }
     }
 
-    private static async Task<string> CollectText(HttpResponseMessage response)
+    private static async Task<string> CollectText(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         // Capped at 1 MB: an error page is never larger in practice.
-        var stream = await response.Content.ReadAsStreamAsync();
+        var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var memory = new MemoryStream();
         var buffer = new byte[8192];
         while (true)
         {
-            var read = await stream.ReadAsync(buffer);
+            var read = await stream.ReadAsync(buffer, cancellationToken);
             if (read <= 0) break;
             var remaining = 1_000_000 - (int)memory.Length;
             memory.Write(buffer, 0, Math.Min(read, remaining));
@@ -221,7 +251,7 @@ public sealed class ModelServiceClient(HttpClient? httpClient = null)
         Action<string> onText,
         CancellationToken cancellationToken)
     {
-        var stream = await response.Content.ReadAsStreamAsync();
+        var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         var parser = new ServerSentEventParser();
         var recognizedAnyEvent = false;
         var done = false;
@@ -440,6 +470,7 @@ public sealed class PreparedModelRequest
 
     public required HttpRequestMessage HttpRequest { get; init; }
     public required JsonValue Body { get; init; }
+    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(300);
 
     /// <summary>
     /// The headers that say something about the configuration, with the key replaced by ••••.
@@ -477,10 +508,7 @@ public static class ModelRequestBuilder
             request.Headers.Remove(name);
             if (name.Equals("Authorization", StringComparison.OrdinalIgnoreCase))
             {
-                request.Headers.Authorization = new AuthenticationHeaderValue(
-                    value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
-                        ? value["Bearer ".Length..].Trim()
-                        : value);
+                request.Headers.Authorization = AuthenticationHeaderValue.Parse(value);
             }
             else
             {
@@ -513,11 +541,11 @@ public static class ModelRequestBuilder
         }
         request.Content = new StringContent(body.CompactText, Encoding.UTF8, "application/json");
         request.Headers.Accept.ParseAdd("text/event-stream");
-        // Apply the timeout via HttpClient instead: kept here for parity of the surfaced value.
         return new PreparedModelRequest
         {
             HttpRequest = request,
             Body = body,
+            Timeout = timeout,
             DisplayHeaders = displayHeaders,
         };
     }

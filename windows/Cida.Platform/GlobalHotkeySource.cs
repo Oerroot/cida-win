@@ -17,6 +17,7 @@ public sealed class GlobalHotkeySource : IDisposable
         ShowPanel,
         CaptureText,
         TranslationLayer,
+        WholeWindowTranslationLayer,
     }
 
     public const int WmHotkey = 0x0312;
@@ -51,7 +52,7 @@ public sealed class GlobalHotkeySource : IDisposable
     {
         var id = _nextId++;
         var windowsModifiers = Translate(modifiers);
-        if (!RegisterHotKey(_hwnd, id, (uint)windowsModifiers, keyCode))
+        if (!RegisterHotKey(_hwnd, id, (uint)windowsModifiers | 0x4000 /* MOD_NOREPEAT */, keyCode))
         {
             return false;
         }
@@ -116,16 +117,6 @@ public sealed class GlobalHotkeySource : IDisposable
 
     private nint WndProc(nint hwnd, uint message, nint wParam, nint lParam)
     {
-        if (message == WM_HOTKEY)
-        {
-            try
-            {
-                System.IO.File.AppendAllText(
-                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), "cida-hotkey-log.txt"),
-                    $"WM_HOTKEY id={wParam}" + Environment.NewLine);
-            }
-            catch { }
-        }
         if (message == WM_HOTKEY)
         {
             var id = wParam.ToInt32();

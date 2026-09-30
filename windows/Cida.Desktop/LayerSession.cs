@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace Cida.Desktop;
 
@@ -28,6 +29,7 @@ public sealed class LayerSession : IDisposable
     private DateTime _lastWheel = DateTime.MinValue;
     private int _serial;
     private bool _disposed;
+    private readonly CancellationTokenSource _cancellation = new();
 
     public LayerSession(AppModel model, nint window)
     {
@@ -40,6 +42,7 @@ public sealed class LayerSession : IDisposable
     public async void Start()
     {
         var paragraphs = await Task.Run(() => _reader.ReadVisibleParagraphs(_window));
+        if (_disposed) return;
         Remember(paragraphs);
         InstallWheelWatch();
         await RefreshOverlaysAsync(paragraphs);
@@ -196,12 +199,12 @@ public sealed class LayerSession : IDisposable
                 _model.Settings.ModelService.Format,
                 new SecretRedactor(_model.Settings.ApiKey),
                 null,
-                piece => collected += piece);
+                piece => collected += piece, _cancellation.Token);
             var parsed = LayerTranslationRequest.ParseReply(collected.Trim());
             if (parsed == null) return;
             foreach (var (index, translation) in parsed)
             {
-                if (index < paragraphs.Count)
+                if (index >= 0 && index < paragraphs.Count)
                 {
                     _cache.Set(paragraphs[index], translation);
                 }
@@ -211,6 +214,7 @@ public sealed class LayerSession : IDisposable
         {
             // A failed batch leaves the paragraphs un-overlaid; the next refresh retries.
         }
+        catch (OperationCanceledException) { }
     }
 
     private void PlaceOverlay(WindowParagraphReader.Paragraph paragraph, string translation)
@@ -219,9 +223,8 @@ public sealed class LayerSession : IDisposable
         if (_overlays.TryGetValue(key, out var existing))
         {
             // Re-place: the paragraph moved with the scroll.
-            existing.Left = paragraph.Bounds.Left - 2;
-            existing.Top = paragraph.Bounds.Top - 2;
-            existing.Width = Math.Max(paragraph.Bounds.Width + 4, 200);
+            existing.MoveToBounds(paragraph.Bounds);
+            existing.SetText(translation);
             if (!existing.IsVisible) existing.Show();
             return;
         }
@@ -237,6 +240,7 @@ public sealed class LayerSession : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _cancellation.Cancel();
         _wheelClock.Stop();
         _stillClock.Stop();
         foreach (var overlay in _overlays.Values)

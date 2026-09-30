@@ -138,6 +138,8 @@ public sealed class LoginItem(string? executablePath = null)
 
     public void SetEnabled(bool enabled)
     {
+        if (enabled && !File.Exists(ExecutablePath))
+            throw new FileNotFoundException("找不到辞达 GUI 程序，无法设置开机启动。", ExecutablePath);
         using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKey);
         if (enabled)
         {

@@ -103,7 +103,7 @@ public sealed class SettingsWindow : Window
         _launchAtLogin.IsChecked = _model.Store.LaunchAtLogin();
     }
 
-    private void Save()
+    private void Save(bool close = true)
     {
         var settings = _model.Settings with
         {
@@ -127,12 +127,14 @@ public sealed class SettingsWindow : Window
         }
         _model.Store.SetLaunchAtLogin(_launchAtLogin.IsChecked == true);
         _model.ReloadSettings();
-        Close();
+        if (close) Close();
     }
 
     private async Task RunCheckAsync()
     {
-        Save();
+        if (!_check.IsEnabled) return;
+        Save(close: false);
+        _check.IsEnabled = false;
         _status.Text = "正在检查…";
         // Re-read through the store so the key travels with the settings.
         var settings = _model.Store.LoadSettings() with { ApiKey = _model.Store.ReadApiKey() ?? "" };
@@ -141,5 +143,6 @@ public sealed class SettingsWindow : Window
         _status.Text = result.Passed
             ? $"已就绪 · {result.Model}"
             : $"检查失败 · {result.Failure?.Reason() ?? "未知错误"}";
+        _check.IsEnabled = true;
     }
 }

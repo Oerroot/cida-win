@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="../tests/Cida.Core.Tests/Cida.Core.Tests.csproj" />
+  <Project Path="../tests/Cida.Windows.Tests/Cida.Windows.Tests.csproj" />
   <Project Path="Cida.Cli/Cida.Cli.csproj" />
   <Project Path="Cida.Core/Cida.Core.csproj" />
   <Project Path="Cida.Desktop/Cida.Desktop.csproj" />

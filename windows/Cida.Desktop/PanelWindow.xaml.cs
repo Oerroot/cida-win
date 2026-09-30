@@ -84,11 +84,6 @@ public sealed class PanelWindow : Window
         _composer.Background = Brushes.Transparent;
         _composer.Foreground = FindResource("Ink") as Brush;
         _composer.KeyDown += OnComposerKeyDown;
-        // IME verification instrumentation: composition starts/updates/ends land in the
-        // log, so marked-text behavior in the no-activate panel can be asserted
-        // programmatically (docs/verification.md records the results).
-        _composer.PreviewTextInput += (_, arguments) =>
-            ImeLog($"input '{arguments.Text}'");
         root.Children.Add(_composer);
 
         _result.TextWrapping = TextWrapping.Wrap;
@@ -109,7 +104,6 @@ public sealed class PanelWindow : Window
         {
             PlaceNearCaret();
             MakeNonActivating();
-            HookImeMessages();
         };
         Deactivated += (_, _) => { };
         PreviewKeyDown += OnPanelKeyDown;
@@ -129,7 +123,7 @@ public sealed class PanelWindow : Window
                 ActivateForInput();
             }
         };
-        Loaded += async (_, _) => await BringInSelectionAsync();
+        Closed += (_, _) => _cancellation?.Cancel();
         _composer.LostKeyboardFocus += (_, _) => { };
     }
 
@@ -142,9 +136,15 @@ public sealed class PanelWindow : Window
         _modeSwitch.Content = _mode == ProcessingMode.Translate ? "⇄ 改进" : "⇄ 翻译";
     }
 
-    private async Task BringInSelectionAsync()
+    private int _selectionSerial;
+
+    public async Task BringInSelectionAsync()
     {
+        MakeNonActivating();
+        PlaceNearCaret();
+        var serial = ++_selectionSerial;
         var submission = await _model.ReadSelectionAsync();
+        if (serial != _selectionSerial || !IsVisible) return;
         if (submission is { } value)
         {
             _composer.Text = value.Text;
@@ -153,8 +153,14 @@ public sealed class PanelWindow : Window
         }
         else
         {
-            _composer.Focus();
+            _composer.Text = "";
         }
+    }
+
+    public void SetSourceText(string text)
+    {
+        ++_selectionSerial;
+        _composer.Text = text;
     }
 
     private void OnComposerKeyDown(object sender, System.Windows.Input.KeyEventArgs arguments)
@@ -207,7 +213,6 @@ public sealed class PanelWindow : Window
     public void BeginResult(ProcessingMode mode, string source)
     {
         _cancellation?.Cancel();
-        _cancellation = new CancellationTokenSource();
         _phase = ResultPhase.Streaming;
         _result.Text = "";
         _note.Visibility = Visibility.Collapsed;
@@ -278,61 +283,7 @@ public sealed class PanelWindow : Window
 
     private void PlaceNearCaret()
     {
-        // Near the caret or the mouse, clamped to the working area of its screen.
-        var position = System.Windows.Forms.Cursor.Position;
-        var screen = System.Windows.Forms.Screen.FromPoint(position);
-        var working = screen.WorkingArea;
-        Left = Math.Min(
-            Math.Max(position.X - Width / 2, working.Left + 8),
-            working.Right - Width - 8);
-        Top = Math.Min(
-            Math.Max(position.Y + 20, working.Top + 8),
-            working.Bottom - 240);
-    }
-
-    private System.Windows.Interop.HwndSourceHook? _imeHook;
-
-    /// <summary>Writes one IME verification line to %Temp%\cida-ime-log.txt.</summary>
-    private static void ImeLog(string line)
-    {
-        try
-        {
-            System.IO.File.AppendAllText(
-                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "cida-ime-log.txt"),
-                $"{DateTime.Now:HH:mm:ss.fff} {line}" + Environment.NewLine);
-        }
-        catch
-        {
-            // Logging must never break input.
-        }
-    }
-
-    private void HookImeMessages()
-    {
-        var source = System.Windows.Interop.HwndSource.FromHwnd(
-            new WindowInteropHelper(this).Handle);
-        _imeHook = (nint hwnd, int message, nint wParam, nint lParam, ref bool handled) =>
-        {
-            // WM_IME_STARTCOMPOSITION 0x010D, WM_IME_COMPOSITION 0x010F,
-            // WM_IME_ENDCOMPOSITION 0x010E, WM_IME_CHAR 0x0286, WM_IME_NOTIFY 0x0282.
-            switch (message)
-            {
-                case 0x010D:
-                    ImeLog("WM_IME_STARTCOMPOSITION (marked text begins)");
-                    break;
-                case 0x010F:
-                    ImeLog($"WM_IME_COMPOSITION flags=0x{wParam:X}");
-                    break;
-                case 0x010E:
-                    ImeLog("WM_IME_ENDCOMPOSITION (composition committed or cancelled)");
-                    break;
-                case 0x0286:
-                    ImeLog($"WM_IME_CHAR U+{wParam & 0xFFFF:X4}");
-                    break;
-            }
-            return 0;
-        };
-        source?.AddHook(_imeHook);
+        WindowPlacement.NearCursor(this);
     }
 
     private void MakeNonActivating()

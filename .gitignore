@@ -5,6 +5,9 @@ obj/
 .vs/
 artifacts/
 TestResults/
+*.pfx
+*.p12
+windows/Cida.Desktop/SparsePackage/build/identity-files.txt
 
 # IDE
 .idea/
