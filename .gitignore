@@ -1,0 +1,11 @@
+# Build artifacts
+bin/
+obj/
+*.user
+.vs/
+artifacts/
+TestResults/
+
+# IDE
+.idea/
+*.swp
