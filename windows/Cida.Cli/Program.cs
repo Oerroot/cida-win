@@ -5,6 +5,11 @@ using Cida.Platform;
 // config/check commands, mirroring the upstream "the app binary is the CLI" design.
 
 var arguments = args.Skip(0).ToList();
+if (arguments.FirstOrDefault() == "probe")
+{
+    Cida.Cli.SelectionProbe.Run();
+    return;
+}
 if (CommandLineInterface.Handles(arguments))
 {
     var environment = Environment.GetEnvironmentVariables()

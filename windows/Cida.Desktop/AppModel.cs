@@ -27,6 +27,8 @@ public sealed class AppModel
     private PanelWindow? _panel;
     private CaptureWindow? _capture;
     private SettingsWindow? _settingsWindow;
+    private readonly TranslationLayer _layer = new();
+    private LayerOverlayWindow? _layerOverlay;
     private System.Windows.Forms.NotifyIcon? _tray;
     private CidaSettings _settings;
     private int _resultSerial;
@@ -114,9 +116,7 @@ public sealed class AppModel
                     StartCapture();
                     break;
                 case GlobalHotkeySource.GlobalShortcutActionMirror.TranslationLayer:
-                    // P4 scope: pointer-paragraph translation arrives later; the panel is the
-                    // interim behavior so the shortcut is never a no-op.
-                    TogglePanel();
+                    ToggleLayer();
                     break;
             }
         });
@@ -267,6 +267,77 @@ public sealed class AppModel
         {
             Submit(_panel, text, ProcessingMode.Translate);
         }
+    }
+
+    // MARK: translation layer (pointer paragraph)
+
+    private void ToggleLayer()
+    {
+        if (_layerOverlay != null)
+        {
+            _layerOverlay.Close();
+            _layerOverlay = null;
+            return;
+        }
+        var paragraph = Task.Run(() => _layer.ParagraphUnderCursor()).Result;
+        if (paragraph == null)
+        {
+            // No readable paragraph under the pointer: the panel remains the fallback.
+            TogglePanel();
+            return;
+        }
+        TranslateInPlace(paragraph);
+    }
+
+    private void TranslateInPlace(TranslationLayer.LayerParagraph paragraph)
+    {
+        if (!_settings.IsModelServiceComplete)
+        {
+            TogglePanel();
+            return;
+        }
+        var overlay = new LayerOverlayWindow("", paragraph.Bounds);
+        _layerOverlay = overlay;
+        overlay.Show();
+
+        var languages = _settings.RequestLanguages();
+        var request = new ProcessingRequest
+        {
+            Text = paragraph.Text,
+            Mode = ProcessingMode.Translate,
+            MyLanguage = languages.My,
+            ForeignLanguage = languages.Foreign,
+        };
+        var serial = _resultSerial;
+        Task.Run(async () =>
+        {
+            try
+            {
+                var prepared = ModelServiceClient.Prepare(request, _settings);
+                await _client.SendAsync(
+                    prepared,
+                    _settings.ModelService.Format,
+                    new SecretRedactor(_settings.ApiKey),
+                    null,
+                    piece => Dispatcher.BeginInvoke(() =>
+                    {
+                        if (_layerOverlay == overlay) overlay.Append(piece);
+                    }));
+            }
+            catch (ModelServiceException error)
+            {
+                Dispatcher.BeginInvoke(() =>
+                {
+                    if (_layerOverlay == overlay)
+                    {
+                        overlay.Close();
+                        _layerOverlay = null;
+                        TogglePanel();
+                    }
+                });
+                _ = error;
+            }
+        });
     }
 
     // MARK: tray
