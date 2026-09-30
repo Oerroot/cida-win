@@ -29,6 +29,7 @@ public sealed class AppModel
     private SettingsWindow? _settingsWindow;
     private readonly TranslationLayer _layer = new();
     private LayerOverlayWindow? _layerOverlay;
+    private LayerSession? _layerSession;
     private System.Windows.Forms.NotifyIcon? _tray;
     private CidaSettings _settings;
     private int _resultSerial;
@@ -122,7 +123,7 @@ public sealed class AppModel
                     StartCapture();
                     break;
                 case GlobalHotkeySource.GlobalShortcutActionMirror.TranslationLayer:
-                    ToggleLayer();
+                    ToggleLayer(KeyboardState.ShiftIsDown());
                     break;
             }
         });
@@ -277,22 +278,40 @@ public sealed class AppModel
 
     // MARK: translation layer (pointer paragraph)
 
-    private void ToggleLayer()
+    private void ToggleLayer(bool wholeWindow)
     {
-        if (_layerOverlay != null)
+        // The whole-window variant (Alt+Shift+D) and the paragraph variant close each other.
+        _layerOverlay?.Close();
+        _layerOverlay = null;
+        _layerSession?.Dispose();
+        if (!wholeWindow)
         {
-            _layerOverlay.Close();
-            _layerOverlay = null;
+            var paragraph = Task.Run(() => _layer.ParagraphUnderCursor()).Result;
+            if (paragraph == null)
+            {
+                // No readable paragraph under the pointer: the panel remains the fallback.
+                TogglePanel();
+                return;
+            }
+            TranslateInPlace(paragraph);
             return;
         }
-        var paragraph = Task.Run(() => _layer.ParagraphUnderCursor()).Result;
-        if (paragraph == null)
+        var window = Cida.Platform.WindowParagraphReader.ForegroundWindow();
+        if (window == 0)
         {
-            // No readable paragraph under the pointer: the panel remains the fallback.
             TogglePanel();
             return;
         }
-        TranslateInPlace(paragraph);
+        _layerSession = new LayerSession(this, window);
+        _layerSession.Start();
+    }
+
+    internal void LayerSessionEnded(LayerSession session)
+    {
+        if (ReferenceEquals(_layerSession, session))
+        {
+            _layerSession = null;
+        }
     }
 
     private void TranslateInPlace(TranslationLayer.LayerParagraph paragraph)
