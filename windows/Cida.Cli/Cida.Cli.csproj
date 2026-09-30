@@ -11,6 +11,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <OutputType>Exe</OutputType>
     <AssemblyName>cida</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>Cida.Cli</RootNamespace>
     <Nullable>enable</Nullable>
   </PropertyGroup>

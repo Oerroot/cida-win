@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package IgnorableNamespaces="uap uap10"
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities">
+
+  <!-- Identity package (sparse / with external location): grants the unpackaged Cida.exe
+       package identity so Windows.Media.Ocr becomes callable, without MSIX-installing the
+       app. Follows the PowerToys approach and Microsoft's "grant identity to nonpackaged
+       apps" template. -->
+
+  <Identity Name="Cida.Win"
+            Publisher="CN=Cida Windows"
+            Version="0.1.0.0"
+            ProcessorArchitecture="neutral" />
+
+  <Properties>
+    <DisplayName>辞达 Cida</DisplayName>
+    <PublisherDisplayName>Cida Windows</PublisherDisplayName>
+    <Logo>Assets\logo.png</Logo>
+    <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
+  </Properties>
+
+  <Resources>
+    <Resource Language="zh-CN" />
+    <Resource Language="en-US" />
+  </Resources>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+
+  <Applications>
+    <Application Id="Cida"
+                 Executable="Cida.exe"
+                 uap10:TrustLevel="mediumIL"
+                 uap10:RuntimeBehavior="win32App">
+      <uap:VisualElements AppListEntry="none"
+                          DisplayName="辞达 Cida"
+                          Description="在任何应用里翻译和润色文字"
+                          BackgroundColor="transparent"
+                          Square150x150Logo="Assets\logo.png"
+                          Square44x44Logo="Assets\logo.png" />
+    </Application>
+  </Applications>
+</Package>

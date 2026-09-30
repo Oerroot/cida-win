@@ -42,6 +42,12 @@ public sealed class AppModel
 
     public void Start()
     {
+        Task.Run(() =>
+        {
+            // Package identity unlocks Windows.Media.Ocr; the app runs fine without it
+            // (capture reports OCR unavailable).
+            new SparsePackageRegistrar().EnsureRegistered();
+        });
         InstallTray();
         ApplyShortcuts();
         ListenForConfigurationChanges();

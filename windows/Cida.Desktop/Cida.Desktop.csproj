@@ -5,6 +5,10 @@
     <ProjectReference Include="..\Cida.Platform\Cida.Platform.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.161" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -18,4 +22,7 @@
   </PropertyGroup>
 
 
+  <ItemGroup>
+    <Content Include="SparsePackage\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -16,6 +16,8 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(System.Windows.StartupEventArgs e)
     {
+        // Velopack's hook: handles install/update/uninstall events; no-op unpackaged.
+        Velopack.VelopackApp.Build().Run();
         base.OnStartup(e);
         _model = new AppModel();
         _model.Start();

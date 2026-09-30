@@ -19,7 +19,13 @@
 
 ## 安装与配置
 
-发布打包用 [Velopack](https://github.com/velopack/velopack)（免安装 exe + 增量更新）。开发期直接：
+发布打包用 [Velopack](https://github.com/velopack/velopack)（免安装 exe + 增量更新）：
+
+```powershell
+scripts/package.ps1 -Version 0.1.1   # 产出 Setup.exe / Portable.zip / full+delta nupkg
+```
+
+首次还需构建并注册身份包（开发机一次性）：`scripts/sparse-package.ps1`。开发期直接：
 
 ```powershell
 dotnet run --project windows/Cida.Desktop
@@ -37,12 +43,22 @@ cida config show --json                          # 机器可读输出
 
 全部字段：`cida config schema`。
 
-## OCR 说明
+## OCR 与包身份（sparse package）
 
-截图翻译使用 `Windows.Media.Ocr`。两点限制：
+截图翻译使用 `Windows.Media.Ocr`。按微软文档该 API 需要包身份，本项目实现了完整的
+sparse package（packaging with external location）方案，即 PowerToys 打通 OCR 的同款路线：
 
-1. **需要包身份**：微软要求桌面应用以 MSIX（或 sparse package）运行才能调用此 API。裸进程运行时截图翻译会提示不可用；正式发布走 sparse package 授予身份（PowerToys 的同款方案），Velopack 分发不受影响。
-2. **需要语言包**：中文识别依赖系统安装了中文 OCR 语言包（设置 → 时间和语言 → 语言和区域 → 中文 → 语言选项）。
+- `windows/Cida.Desktop/SparsePackage/` 是身份包清单（`runFullTrust` + `AllowExternalContent`）
+- `scripts/sparse-package.ps1` 用 Windows SDK 的 MakeAppx 打包、自签名证书签名并注册
+- 可执行文件内嵌 `<msix>` 绑定清单，进程启动即获得包身份
+- GUI 启动时会自动幂等注册（`SparsePackageRegistrar`），CLI 可用 `cida probe-identity` 自检
+
+实测结论（Windows 11 26100+）：即使没有包身份，`OcrEngine` 也能直接创建并识别——
+文档的限制在运行时并未强制。因此 sparse package 是旧版 Windows 的保险层而非硬依赖；
+本仓库已在实机验证两条路径都可用（中文图片 → 识别 → 段落重建）。
+
+唯一硬性要求是**语言包**：中文识别依赖系统安装了中文 OCR 语言包
+（设置 → 时间和语言 → 语言和区域 → 中文 → 语言选项）。
 
 ## 仓库结构
 

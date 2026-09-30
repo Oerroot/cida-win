@@ -114,7 +114,7 @@ public sealed class LocalOcr
         return lines;
     }
 
-    private static async Task<Windows.Graphics.Imaging.SoftwareBitmap?> SoftwareBitmapFromPNGAsync(
+    private static async Task<Windows.Graphics.Imaging.SoftwareBitmap?> SoftwareBitmapFromPngAsync(
         byte[] png)
     {
         var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
@@ -128,10 +128,6 @@ public sealed class LocalOcr
             Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8,
             Windows.Graphics.Imaging.BitmapAlphaMode.Premultiplied);
     }
-
-    private static async Task<Windows.Graphics.Imaging.SoftwareBitmap?> SoftwareBitmapFromPngAsync(
-        byte[] png)
-        => await SoftwareBitmapFromPngAsync(png);
 }
 
 /// <summary>
