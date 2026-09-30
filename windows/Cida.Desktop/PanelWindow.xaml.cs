@@ -84,6 +84,11 @@ public sealed class PanelWindow : Window
         _composer.Background = Brushes.Transparent;
         _composer.Foreground = FindResource("Ink") as Brush;
         _composer.KeyDown += OnComposerKeyDown;
+        // IME verification instrumentation: composition starts/updates/ends land in the
+        // log, so marked-text behavior in the no-activate panel can be asserted
+        // programmatically (docs/verification.md records the results).
+        _composer.PreviewTextInput += (_, arguments) =>
+            ImeLog($"input '{arguments.Text}'");
         root.Children.Add(_composer);
 
         _result.TextWrapping = TextWrapping.Wrap;
@@ -104,10 +109,26 @@ public sealed class PanelWindow : Window
         {
             PlaceNearCaret();
             MakeNonActivating();
+            HookImeMessages();
         };
         Deactivated += (_, _) => { };
         PreviewKeyDown += OnPanelKeyDown;
 
+        // The panel shows without stealing focus; clicking the composer must make IME
+        // composition possible, which needs a real activation: drop WS_EX_NOACTIVATE
+        // and focus the editor (the upstream nonactivating panel focuses on click too).
+        _composer.PreviewMouseLeftButtonDown += (_, _) => ActivateForInput();
+        _composer.GotKeyboardFocus += (_, _) =>
+        {
+            // Focus can also arrive by keyboard: make sure the window is not still
+            // WS_EX_NOACTIVATE, or the IME cannot attach its composition context.
+            var helper = new WindowInteropHelper(this);
+            var style = GetWindowLong(helper.Handle, GWL_EXSTYLE);
+            if ((style & WS_EX_NOACTIVATE) != 0)
+            {
+                ActivateForInput();
+            }
+        };
         Loaded += async (_, _) => await BringInSelectionAsync();
         _composer.LostKeyboardFocus += (_, _) => { };
     }
@@ -269,12 +290,73 @@ public sealed class PanelWindow : Window
             working.Bottom - 240);
     }
 
+    private System.Windows.Interop.HwndSourceHook? _imeHook;
+
+    /// <summary>Writes one IME verification line to %Temp%\cida-ime-log.txt.</summary>
+    private static void ImeLog(string line)
+    {
+        try
+        {
+            System.IO.File.AppendAllText(
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "cida-ime-log.txt"),
+                $"{DateTime.Now:HH:mm:ss.fff} {line}" + Environment.NewLine);
+        }
+        catch
+        {
+            // Logging must never break input.
+        }
+    }
+
+    private void HookImeMessages()
+    {
+        var source = System.Windows.Interop.HwndSource.FromHwnd(
+            new WindowInteropHelper(this).Handle);
+        _imeHook = (nint hwnd, int message, nint wParam, nint lParam, ref bool handled) =>
+        {
+            // WM_IME_STARTCOMPOSITION 0x010D, WM_IME_COMPOSITION 0x010F,
+            // WM_IME_ENDCOMPOSITION 0x010E, WM_IME_CHAR 0x0286, WM_IME_NOTIFY 0x0282.
+            switch (message)
+            {
+                case 0x010D:
+                    ImeLog("WM_IME_STARTCOMPOSITION (marked text begins)");
+                    break;
+                case 0x010F:
+                    ImeLog($"WM_IME_COMPOSITION flags=0x{wParam:X}");
+                    break;
+                case 0x010E:
+                    ImeLog("WM_IME_ENDCOMPOSITION (composition committed or cancelled)");
+                    break;
+                case 0x0286:
+                    ImeLog($"WM_IME_CHAR U+{wParam & 0xFFFF:X4}");
+                    break;
+            }
+            return 0;
+        };
+        source?.AddHook(_imeHook);
+    }
+
     private void MakeNonActivating()
     {
         // WS_EX_NOACTIVATE keeps the source application focused while the panel is visible.
         var helper = new WindowInteropHelper(this);
         var style = GetWindowLong(helper.Handle, GWL_EXSTYLE);
         SetWindowLong(helper.Handle, GWL_EXSTYLE, style | WS_EX_NOACTIVATE);
+    }
+
+    /// <summary>
+    /// Gives the composer real keyboard focus for IME composition: removes
+    /// WS_EX_NOACTIVATE, activates the window, and places the caret. Without this, a
+    /// no-activate window never receives the composition input context, so marked text
+    /// (IME composition) cannot start.
+    /// </summary>
+    private void ActivateForInput()
+    {
+        var helper = new WindowInteropHelper(this);
+        var style = GetWindowLong(helper.Handle, GWL_EXSTYLE);
+        SetWindowLong(helper.Handle, GWL_EXSTYLE, style & ~WS_EX_NOACTIVATE);
+        Activate();
+        _composer.Focus();
+        _composer.CaretIndex = _composer.Text.Length;
     }
 
     private const int GWL_EXSTYLE = -20;

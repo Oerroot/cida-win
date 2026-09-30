@@ -95,14 +95,37 @@ public sealed class GlobalHotkeySource : IDisposable
         var Class = new WNDCLASS
         {
             lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
+            hInstance = GetModuleHandle(null),
+            lpszMenuName = "",
             lpszClassName = name,
         };
-        RegisterClass(ref Class);
-        return CreateWindowEx(0, name, "", 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, 0);
+        var atom = RegisterClass(ref Class);
+        if (atom == 0)
+        {
+            var error = Marshal.GetLastWin32Error();
+            throw new InvalidOperationException($"RegisterClass failed: {error}");
+        }
+        var window = CreateWindowEx(0, name, "", 0, 0, 0, 0, 0, HWND_MESSAGE, 0, GetModuleHandle(null), 0);
+        if (window == 0)
+        {
+            var error = Marshal.GetLastWin32Error();
+            throw new InvalidOperationException($"CreateWindowEx failed: {error}");
+        }
+        return window;
     }
 
     private nint WndProc(nint hwnd, uint message, nint wParam, nint lParam)
     {
+        if (message == WM_HOTKEY)
+        {
+            try
+            {
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), "cida-hotkey-log.txt"),
+                    $"WM_HOTKEY id={wParam}" + Environment.NewLine);
+            }
+            catch { }
+        }
         if (message == WM_HOTKEY)
         {
             var id = wParam.ToInt32();
@@ -141,13 +164,16 @@ public sealed class GlobalHotkeySource : IDisposable
 
     private delegate nint WndProcDelegate(nint hwnd, uint message, nint wParam, nint lParam);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern ushort RegisterClass(ref WNDCLASS lpWndClass);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern nint CreateWindowEx(
         uint dwExStyle, string lpClassName, string lpWindowName, uint dwStyle,
         int x, int y, int nWidth, int nHeight, nint hWndParent, nint hMenu, nint hInstance, nint lpParam);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint GetModuleHandle(string? lpModuleName);
 
     [DllImport("user32.dll")]
     private static extern nint DefWindowProc(nint hWnd, uint Msg, nint wParam, nint lParam);
