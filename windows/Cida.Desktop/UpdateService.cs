@@ -19,7 +19,7 @@ public sealed class UpdateService
     public bool CanRestart => _manager?.UpdatePendingRestart != null && !_busy;
     public bool IsDownloading => _downloadCancellation != null;
     public event Action? Changed;
-    public static string Version => System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(App).Assembly)?.InformationalVersion.Split('+')[0] ?? "0.2.0-rc.1";
+    public static string Version => System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(App).Assembly)?.InformationalVersion.Split('+')[0] ?? "0.2.0-rc.2";
     private void Notify() => Changed?.Invoke();
     public async Task CheckDailyAsync()
     {
