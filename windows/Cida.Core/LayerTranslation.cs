@@ -22,7 +22,7 @@ public static class LayerTranslationRequest
     /// Parses the model's reply: one translation per id, every id present, in any order.
     /// Null when the reply is not the JSON array the contract asks for.
     /// </summary>
-    public static IReadOnlyDictionary<int, string>? ParseReply(string reply)
+    public static IReadOnlyDictionary<int, string>? ParseReply(string reply, int? expectedCount = null)
     {
         var value = JsonValue.Parse(reply);
         if (value?.TokenType != JsonValue.Kind.Array) return null;
@@ -32,9 +32,10 @@ public static class LayerTranslationRequest
             if (item.TokenType != JsonValue.Kind.Object) return null;
             var id = item["id"]?.IntValue;
             var text = item["text"]?.StringValue;
-            if (id == null || text == null) return null;
-            result[id.Value] = text;
+            if (id == null || id < 0 || string.IsNullOrWhiteSpace(text)
+                || !result.TryAdd(id.Value, text)) return null;
         }
+        if (expectedCount is { } count && (result.Count != count || result.Keys.Any(id => id >= count))) return null;
         return result;
     }
 

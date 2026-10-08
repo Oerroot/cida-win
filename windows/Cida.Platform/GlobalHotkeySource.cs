@@ -18,6 +18,7 @@ public sealed class GlobalHotkeySource : IDisposable
         CaptureText,
         TranslationLayer,
         WholeWindowTranslationLayer,
+        ImproveAndReplace,
     }
 
     public const int WmHotkey = 0x0312;

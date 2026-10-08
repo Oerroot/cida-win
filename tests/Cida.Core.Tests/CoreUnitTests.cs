@@ -29,7 +29,8 @@ public sealed class ModelsTests
             LaunchAtLogin = true,
         };
         var restored = CidaSettings.FromJsonText(settings.ToJsonText());
-        Assert.Equal(settings, restored);
+        Assert.Equal(settings.EffectiveActions, restored.EffectiveActions);
+        Assert.Equal(settings with { Actions = restored.Actions }, restored);
     }
 
     [Fact]

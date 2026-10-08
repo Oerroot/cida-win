@@ -34,6 +34,7 @@ public sealed class SecretStore(string? directory = null)
         {
             return null;
         }
+        catch (UnauthorizedAccessException) { return null; }
     }
 
     public void Save(string apiKey)
@@ -41,19 +42,12 @@ public sealed class SecretStore(string? directory = null)
         Directory.CreateDirectory(_directory);
         var encrypted = ProtectedData.Protect(
             Encoding.UTF8.GetBytes(apiKey), null, DataProtectionScope.CurrentUser);
-        File.WriteAllBytes(KeyPath, encrypted);
+        AtomicFile.Write(KeyPath, encrypted);
     }
 
     public void Clear()
     {
-        try
-        {
-            if (File.Exists(KeyPath)) File.Delete(KeyPath);
-        }
-        catch (IOException)
-        {
-            // A locked file clears on the next write; nothing to surface to the user.
-        }
+        if (File.Exists(KeyPath)) File.Delete(KeyPath);
     }
 
     public bool Exists() => File.Exists(KeyPath);
@@ -65,6 +59,7 @@ public sealed class SecretStore(string? directory = null)
 /// </summary>
 public sealed class SettingsFileStore(string? directory = null)
 {
+    public static string? RecoveryNote { get; private set; }
     private readonly string _directory = directory
         ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Cida");
@@ -77,7 +72,23 @@ public sealed class SettingsFileStore(string? directory = null)
         try
         {
             if (!File.Exists(SettingsPath)) return new CidaSettings();
-            return CidaSettings.FromJsonText(File.ReadAllText(SettingsPath));
+            var text = File.ReadAllText(SettingsPath);
+            using var json = System.Text.Json.JsonDocument.Parse(text);
+            if (json.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+                throw new System.Text.Json.JsonException("Settings must be an object.");
+            RecoveryNote = null;
+            return CidaSettings.FromJsonText(text);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            RecoveryNote = "配置文件损坏，原文件已保留。可在设置中恢复上次备份。";
+            try
+            {
+                if (File.Exists(SettingsPath + ".bak"))
+                    return CidaSettings.FromJsonText(File.ReadAllText(SettingsPath + ".bak"));
+            }
+            catch (IOException) { }
+            return new CidaSettings();
         }
         catch (IOException)
         {
@@ -92,7 +103,10 @@ public sealed class SettingsFileStore(string? directory = null)
     public void SaveSettings(CidaSettings settings)
     {
         Directory.CreateDirectory(_directory);
-        File.WriteAllText(SettingsPath, settings.ToJsonText());
+        if (RecoveryNote != null && File.Exists(SettingsPath))
+            File.Copy(SettingsPath, SettingsPath + ".damaged-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff"), false);
+        AtomicFile.WriteText(SettingsPath, settings.ToJsonText(), backup: RecoveryNote == null);
+        RecoveryNote = null;
     }
 
     public ModelServiceCheckRecord? LoadLastCheck()
@@ -116,7 +130,7 @@ public sealed class SettingsFileStore(string? directory = null)
             if (File.Exists(LastCheckPath)) File.Delete(LastCheckPath);
             return;
         }
-        File.WriteAllText(LastCheckPath, record.ToJsonText());
+        AtomicFile.WriteText(LastCheckPath, record.ToJsonText());
     }
 }
 
@@ -158,12 +172,21 @@ public sealed class LoginItem(string? executablePath = null)
 /// </summary>
 public static class ConfigurationChangeNotifier
 {
-    public const string PipeName = "cida-configuration-changed";
+    public static string PipeName
+    {
+        get
+        {
+            var identity = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;
+            var profile = Environment.GetEnvironmentVariable("CIDA_PROFILE");
+            if (!string.IsNullOrEmpty(profile)) identity += "|" + Path.GetFullPath(profile).ToUpperInvariant();
+            return "cida-configuration-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)))[..20];
+        }
+    }
 
     /// <summary>What the GUI calls when the pipe receives a ping.</summary>
     public static void Listen(Action onChanged, CancellationToken cancellationToken)
     {
-        var thread = new Thread(() =>
+        _ = Task.Run(async () =>
         {
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -175,26 +198,24 @@ public static class ConfigurationChangeNotifier
                         System.IO.Pipes.PipeDirection.In,
                         1,
                         System.IO.Pipes.PipeTransmissionMode.Byte,
-                        System.IO.Pipes.PipeOptions.CurrentUserOnly);
-                    server.WaitForConnection();
+                        System.IO.Pipes.PipeOptions.CurrentUserOnly | System.IO.Pipes.PipeOptions.Asynchronous);
+                    await server.WaitForConnectionAsync(cancellationToken);
                     using var reader = new StreamReader(server, Encoding.UTF8);
-                    reader.ReadLine();
+                    using var readDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    readDeadline.CancelAfter(TimeSpan.FromSeconds(2));
+                    var message = await reader.ReadLineAsync(readDeadline.Token);
                     server.Dispose();
                     server = null;
-                    onChanged();
+                    if (message == "changed") onChanged();
                 }
                 catch (Exception)
                 {
                     server?.Dispose();
                     if (cancellationToken.IsCancellationRequested) return;
-                    Thread.Sleep(500);
+                    try { await Task.Delay(500, cancellationToken); } catch (OperationCanceledException) { return; }
                 }
             }
-        })
-        {
-            IsBackground = true,
-        };
-        thread.Start();
+        }, cancellationToken);
     }
 
     /// <summary>What the CLI calls after writing the configuration.</summary>
@@ -220,6 +241,7 @@ public static class PlatformConfiguration
     public static ConfigurationStore Production(
         string? directory = null, string? executablePath = null)
     {
+        directory ??= Environment.GetEnvironmentVariable("CIDA_PROFILE");
         var settings = new SettingsFileStore(directory);
         var secrets = new SecretStore(directory);
         var loginItem = new LoginItem(executablePath);

@@ -24,16 +24,17 @@ public sealed class CaptureWindow : Window
 {
     private readonly AppModel _model;
     private readonly LocalOcr _ocr;
-    private readonly Border _veil = new() { Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(96, 248, 247, 244)) };
+    private readonly System.Windows.Shapes.Path _veil = new() { Fill = new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)), IsHitTestVisible = false };
     private readonly Border _selection = new()
     {
-        BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xB4, 0x55, 0x2D)),
+        BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x94, 0xC6, 0xA2)),
         BorderThickness = new Thickness(1.5),
         Background = Brushes.Transparent,
     };
     private ScreenCapturer.CapturedScreen _frozen = null!;
     private System.Windows.Point _start;
     private bool _dragging;
+    private readonly Border _hint = new() { CornerRadius = new CornerRadius(8), Padding = new Thickness(18, 10, 18, 10), Background = new SolidColorBrush(Color.FromArgb(240, 31, 37, 30)) };
 
     public CaptureWindow(AppModel model, ScreenCapturer capturer, LocalOcr ocr)
     {
@@ -53,6 +54,8 @@ public sealed class CaptureWindow : Window
         var canvas = new Canvas();
         canvas.Children.Add(_veil);
         canvas.Children.Add(_selection);
+        _hint.Child = new TextBlock { Text = "拖动选择文字区域 · Esc / 右键取消", FontSize = 13, Foreground = Brushes.White };
+        canvas.Children.Add(_hint);
         Content = canvas;
 
         SourceInitialized += (_, _) => WindowPlacement.Cover(this, _frozen.Bounds);
@@ -61,6 +64,7 @@ public sealed class CaptureWindow : Window
         MouseLeftButtonDown += OnMouseDown;
         MouseMove += OnMouseMove;
         MouseLeftButtonUp += OnMouseUp;
+        MouseRightButtonDown += (_, e) => { e.Handled = true; Close(); };
         KeyDown += (_, arguments) =>
         {
             if (arguments.Key == Key.Escape)
@@ -84,10 +88,11 @@ public sealed class CaptureWindow : Window
         source.Freeze();
         Background = new ImageBrush(source);
 
-        _veil.Width = Width;
-        _veil.Height = Height;
+        _veil.Data = new RectangleGeometry(new Rect(0, 0, Width, Height));
         Canvas.SetLeft(_veil, 0);
         Canvas.SetTop(_veil, 0);
+        _hint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        Canvas.SetLeft(_hint, Math.Max(8, (Width - _hint.DesiredSize.Width) / 2)); Canvas.SetTop(_hint, Math.Max(8, Height - 88));
     }
 
     private void OnMouseDown(object sender, MouseButtonEventArgs arguments)
@@ -104,13 +109,18 @@ public sealed class CaptureWindow : Window
     private void OnMouseMove(object sender, System.Windows.Input.MouseEventArgs arguments)
     {
         if (!_dragging) return;
-        var position = arguments.GetPosition(this);
+        var pointer = arguments.GetPosition(this);
+        var position = new Point(Math.Clamp(pointer.X, 0, ActualWidth), Math.Clamp(pointer.Y, 0, ActualHeight));
         var left = Math.Min(_start.X, position.X);
         var top = Math.Min(_start.Y, position.Y);
         _selection.Width = Math.Abs(position.X - _start.X);
         _selection.Height = Math.Abs(position.Y - _start.Y);
         Canvas.SetLeft(_selection, left);
         Canvas.SetTop(_selection, top);
+        var cutout = new GeometryGroup { FillRule = FillRule.EvenOdd };
+        cutout.Children.Add(new RectangleGeometry(new Rect(0, 0, Width, Height)));
+        cutout.Children.Add(new RectangleGeometry(new Rect(left, top, _selection.Width, _selection.Height)));
+        _veil.Data = cutout;
     }
 
     private async void OnMouseUp(object sender, MouseButtonEventArgs arguments)
@@ -120,7 +130,7 @@ public sealed class CaptureWindow : Window
         ReleaseMouseCapture();
         if (_selection.Width < 4 || _selection.Height < 4)
         {
-            Close();
+            _veil.Data = new RectangleGeometry(new Rect(0, 0, Width, Height));
             return;
         }
 
@@ -132,16 +142,7 @@ public sealed class CaptureWindow : Window
         var crop = CropPng(_frozen, pixels.X, pixels.Y, cropWidth, cropHeight);
         Close();
 
-        var lines = await Task.Run(() => _ocr.RecognizeAsync(crop, cropWidth, cropHeight));
-        if (lines == null || lines.Count == 0)
-        {
-            System.Windows.MessageBox.Show("截图里没有识别到文字（或本机没有可用的文字识别语言包）。", "辞达",
-                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
-            return;
-        }
-        var paragraphs = Cida.Platform.RecognizedLayout.Paragraphs(lines);
-        var text = string.Join("\n\n", paragraphs.Select(paragraph => paragraph.Text));
-        _model.SubmitCapture(text);
+        await _model.RecognizeCaptureAsync(crop, cropWidth, cropHeight);
     }
 
     private static byte[] CropPng(ScreenCapturer.CapturedScreen frozen, int x, int y, int width, int height)

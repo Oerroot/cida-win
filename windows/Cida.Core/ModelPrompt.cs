@@ -13,6 +13,7 @@ public enum ModelLanguageBehavior
 
     /// <summary>Translate into target_language only: the translation layer names the language.</summary>
     TranslateInto,
+    PromptDefined,
 }
 
 public sealed record ModelTaskParameters
@@ -43,6 +44,11 @@ public sealed record ModelTaskParameters
             Operation = ProcessingMode.Improve,
             LanguageBehavior = ModelLanguageBehavior.PreserveSource,
         },
+        ProcessingMode.Custom => new ModelTaskParameters
+        {
+            Operation = ProcessingMode.Custom,
+            LanguageBehavior = ModelLanguageBehavior.PromptDefined,
+        },
         _ => throw new ArgumentOutOfRangeException(nameof(request)),
     };
 
@@ -69,7 +75,7 @@ public static class ModelPromptBuilder
 {
     public static ModelPrompt Build(ProcessingRequest request, CidaSettings settings)
     {
-        var configuredPolicy = settings.PromptFor(request.Mode).Trim();
+        var configuredPolicy = (request.ActionPrompt ?? settings.PromptFor(request.Mode)).Trim();
         var policy = configuredPolicy.Length == 0
             ? CidaSettings.DefaultPromptFor(request.Mode)
             : configuredPolicy;
@@ -167,6 +173,7 @@ public static class ModelPromptBuilder
         ModelLanguageBehavior.TranslateBetween => "translate_between",
         ModelLanguageBehavior.PreserveSource => "preserve_source",
         ModelLanguageBehavior.TranslateInto => "translate_into",
+        ModelLanguageBehavior.PromptDefined => "prompt_defined",
         _ => throw new ArgumentOutOfRangeException(nameof(behavior)),
     };
 }

@@ -7,6 +7,7 @@ public enum ProcessingMode
 {
     Translate,
     Improve,
+    Custom,
 }
 
 public static class ProcessingModeExtensions
@@ -15,6 +16,7 @@ public static class ProcessingModeExtensions
     {
         ProcessingMode.Translate => "翻译",
         ProcessingMode.Improve => "改进",
+        ProcessingMode.Custom => "自定义",
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
 
@@ -22,6 +24,7 @@ public static class ProcessingModeExtensions
     {
         ProcessingMode.Translate => "translate",
         ProcessingMode.Improve => "improve",
+        ProcessingMode.Custom => "custom",
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
 
@@ -29,6 +32,7 @@ public static class ProcessingModeExtensions
     {
         "translate" => ProcessingMode.Translate,
         "improve" => ProcessingMode.Improve,
+        "custom" => ProcessingMode.Custom,
         _ => null,
     };
 }
@@ -63,6 +67,7 @@ public sealed record ProcessingRequest
     /// paragraphs, each translated into this language only.
     /// </summary>
     public string? LayerTargetLanguage { get; init; }
+    public string? ActionPrompt { get; init; }
 }
 
 public enum ResultPhase
@@ -121,6 +126,16 @@ public sealed record CidaSettings
     public string ForeignLanguage { get; init; } = DefaultLanguages().Foreign;
 
     public bool LaunchAtLogin { get; init; }
+    public IReadOnlyList<ProcessingAction>? Actions { get; init; }
+    public IReadOnlyList<ProcessingAction> EffectiveActions => ProcessingAction.Normalize(Actions, TranslationPrompt, ImprovementPrompt)
+        .Select(action => action.Id switch
+        {
+            ProcessingAction.TranslationId => action with { Prompt = TranslationPrompt },
+            ProcessingAction.ImprovementId => action with { Prompt = ImprovementPrompt },
+            _ => action,
+        }).ToList();
+    public IReadOnlyList<ProcessingAction> EnabledActions => EffectiveActions.Where(a => a.Enabled).ToList();
+    public GlobalShortcut? ImproveShortcut { get; init; } = GlobalShortcut.AltF;
 
     /// <summary>The combination that shows the panel from any application; null clears it.</summary>
     public GlobalShortcut? Shortcut { get; init; } = GlobalShortcut.AltA;
@@ -140,13 +155,14 @@ public sealed record CidaSettings
         GlobalShortcutAction.ShowPanel => Shortcut,
         GlobalShortcutAction.CaptureText => CaptureShortcut,
         GlobalShortcutAction.TranslationLayer => LayerShortcut,
+        GlobalShortcutAction.ImproveAndReplace => ImproveShortcut,
         _ => throw new ArgumentOutOfRangeException(nameof(action)),
     };
 
     /// <summary>Every combination the global shortcuts hold; the layer's also holds its Shift variant.</summary>
     public IReadOnlyList<GlobalShortcut> HeldShortcuts()
     {
-        return new[] { Shortcut, CaptureShortcut, LayerShortcut, LayerShortcut?.AddingShift() }
+        return new[] { Shortcut, CaptureShortcut, LayerShortcut, LayerShortcut?.AddingShift(), ImproveShortcut }
             .Where(shortcut => shortcut != null)
             .Select(shortcut => shortcut!.Value)
             .ToList();
@@ -162,6 +178,7 @@ public sealed record CidaSettings
         GlobalShortcutAction.ShowPanel => this with { Shortcut = newShortcut },
         GlobalShortcutAction.CaptureText => this with { CaptureShortcut = newShortcut },
         GlobalShortcutAction.TranslationLayer => this with { LayerShortcut = newShortcut },
+        GlobalShortcutAction.ImproveAndReplace => this with { ImproveShortcut = newShortcut },
         _ => throw new ArgumentOutOfRangeException(nameof(action)),
     };
 
@@ -230,6 +247,10 @@ public sealed record CidaSettings
         [JsonPropertyName("captureShortcut"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] public GlobalShortcutContract? CaptureShortcut { get; set; }
         [JsonPropertyName("layerShortcut"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] public GlobalShortcutContract? LayerShortcut { get; set; }
         [JsonPropertyName("promptContractVersion")] public int? PromptContractVersion { get; set; }
+        [JsonPropertyName("schemaVersion")] public int SchemaVersion { get; set; } = 2;
+        [JsonPropertyName("actions")] public List<ProcessingAction>? Actions { get; set; }
+        [JsonPropertyName("improveShortcut"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] public GlobalShortcutContract? ImproveShortcut { get; set; }
+        [JsonIgnore] public bool ImproveShortcutPresent { get; set; }
 
         // 1.0's provider preset, model and custom endpoint; read once to build modelService.
         [JsonPropertyName("provider")] public string? LegacyProvider { get; set; }
@@ -284,6 +305,7 @@ public sealed record CidaSettings
             contract.ShortcutPresent = remainder.ContainsKey("shortcut");
             contract.CaptureShortcutPresent = remainder.ContainsKey("captureShortcut");
             contract.LayerShortcutPresent = remainder.ContainsKey("layerShortcut");
+            contract.ImproveShortcutPresent = remainder.ContainsKey("improveShortcut");
             contract.ModelServiceText = serviceText;
         }
         catch (JsonException)
@@ -323,6 +345,8 @@ public sealed record CidaSettings
             Shortcut = ReadShortcut(contract.Shortcut, contract.ShortcutPresent, GlobalShortcut.AltA),
             CaptureShortcut = ReadShortcut(contract.CaptureShortcut, contract.CaptureShortcutPresent, GlobalShortcut.AltS),
             LayerShortcut = ReadShortcut(contract.LayerShortcut, contract.LayerShortcutPresent, GlobalShortcut.AltD),
+            ImproveShortcut = ReadShortcut(contract.ImproveShortcut, contract.ImproveShortcutPresent, GlobalShortcut.AltF),
+            Actions = contract.Actions == null ? null : ProcessingAction.Normalize(contract.Actions, translationPrompt, improvementPrompt),
         };
     }
 
@@ -345,6 +369,8 @@ public sealed record CidaSettings
             CaptureShortcut = WriteShortcut(CaptureShortcut),
             LayerShortcut = WriteShortcut(LayerShortcut),
             PromptContractVersion = CurrentPromptContractVersion,
+            ImproveShortcut = WriteShortcut(ImproveShortcut),
+            Actions = EffectiveActions.ToList(),
         };
         // Serialize with the modelService member as a placeholder string, then splice the
         // ordered JSON in: System.Text.Json would otherwise escape it as opaque text.

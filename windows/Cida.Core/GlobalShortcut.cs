@@ -9,6 +9,7 @@ public readonly record struct GlobalShortcut(ushort KeyCode, ShortcutModifiers M
     public static readonly GlobalShortcut AltA = new(0x41, ShortcutModifiers.Alt); // VK 'A'
     public static readonly GlobalShortcut AltS = new(0x53, ShortcutModifiers.Alt); // VK 'S'
     public static readonly GlobalShortcut AltD = new(0x44, ShortcutModifiers.Alt); // VK 'D'
+    public static readonly GlobalShortcut AltF = new(0x46, ShortcutModifiers.Alt);
 
     /// <summary>At least one of these makes a combination a shortcut.</summary>
     public static readonly ShortcutModifiers Required = ShortcutModifiers.Control
@@ -153,6 +154,7 @@ public enum ShortcutModifiers : byte
 /// <summary>What a global shortcut does; each action has its own combination.</summary>
 public enum GlobalShortcutAction
 {
+    ImproveAndReplace,
     /// <summary>Shows or hides the panel, bringing in the frontmost selection.</summary>
     ShowPanel,
 

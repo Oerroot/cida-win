@@ -232,6 +232,44 @@ internal static class ClipboardSnapshot
         }
         finally { CloseClipboard(); }
     }
+    public static bool WriteOwnedText(string text, uint expectedSequence, out uint sequence)
+    {
+        sequence = 0;
+        if (!TryOpen()) return false;
+        nint handle = 0;
+        try
+        {
+            if (SequenceNumber() != expectedSequence) return false;
+            var bytes = System.Text.Encoding.Unicode.GetBytes(text + "\0");
+            handle = GlobalAlloc(0x42, (nuint)bytes.Length);
+            var pointer = handle == 0 ? 0 : GlobalLock(handle);
+            if (pointer == 0) return false;
+            try { Marshal.Copy(bytes, 0, pointer, bytes.Length); } finally { GlobalUnlock(handle); }
+            if (!EmptyClipboard()) return false;
+            sequence = SequenceNumber();
+            if (SetClipboardData(13, handle) == 0) return false;
+            handle = 0; sequence = SequenceNumber(); return true;
+        }
+        finally { if (handle != 0) GlobalFree(handle); CloseClipboard(); }
+    }
+    public static bool RestoreOwned(Snapshot snapshot, uint expectedSequence)
+    {
+        if (!TryOpen()) return false;
+        try
+        {
+            if (SequenceNumber() != expectedSequence || GetClipboardOwner() != Window || !EmptyClipboard()) return false;
+            var okay = true;
+            for (var i = 0; i < snapshot.Formats.Count; i++)
+            {
+                var entry = snapshot.Formats[i];
+                if (SetClipboardData(entry.Format, entry.Handle) != 0) snapshot.Formats[i] = (entry.Format, 0);
+                else okay = false;
+            }
+            return okay;
+        }
+        finally { CloseClipboard(); }
+    }
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern nint GlobalAlloc(uint flags, nuint bytes);
     private static void Free(uint format, nint handle)
     {
         switch (format)

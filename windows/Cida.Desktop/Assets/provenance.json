@@ -1,0 +1,47 @@
+{
+  "upstream": "Xuanwo/cida",
+  "commit": "473013c93e052e08603ffd2faccda0d6dafbb5be",
+  "font_derivatives": [
+    {
+      "source": "SourceSerif4[opsz,wght].ttf",
+      "source_sha256": "97b2d4da6e3cb494b5a1e66ae176914d852ccabef49e0c02c0df25f3e39aca0b",
+      "axes": {
+        "wght": 400,
+        "opsz": 20
+      },
+      "output": "CidaSerif.ttf",
+      "sha256": "0a57bec6008b39cb43af5f125c73372cae9f387f3c0cb48fc4f522b9979c3e22"
+    },
+    {
+      "source": "NotoSerifSC[wght].ttf",
+      "source_sha256": "050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9",
+      "axes": {
+        "wght": 400
+      },
+      "output": "CidaChineseSerif.ttf",
+      "sha256": "053ee3495abd749d30e5e447b5f9eb16b60c1a50a7056f7c0861566e25d982d7"
+    }
+  ],
+  "brand_source": [
+    "glyph.svg",
+    "caret.svg"
+  ],
+  "ocr_data": {
+    "repository": "tesseract-ocr/tessdata_fast",
+    "commit": "87416418657359cb625c412a48b6e1d6d41c29bd",
+    "files": [
+      {
+        "sha256": "a5fcb6f0db1e1d6d8522f39db4e848f05984669172e584e8d76b6b3141e1f730",
+        "file": "chi_sim.traineddata"
+      },
+      {
+        "sha256": "529c5b5797d64b126065cd55f2bb4c7fd7b15790798091b1ff259941a829330b",
+        "file": "chi_tra.traineddata"
+      },
+      {
+        "sha256": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+        "file": "eng.traineddata"
+      }
+    ]
+  }
+}

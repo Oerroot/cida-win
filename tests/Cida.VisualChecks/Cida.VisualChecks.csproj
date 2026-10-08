@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework><UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms>
+    <OutputType>WinExe</OutputType><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../windows/Cida.Desktop/Cida.Desktop.csproj"/></ItemGroup>
+  <Target Name="CopyAccessibilityWorker" AfterTargets="Build">
+    <ItemGroup><WorkerFiles Include="../../windows/Cida.Desktop/bin/$(Configuration)/net10.0-windows10.0.19041.0/Cida.exe;../../windows/Cida.Desktop/bin/$(Configuration)/net10.0-windows10.0.19041.0/Cida.runtimeconfig.json;../../windows/Cida.Desktop/bin/$(Configuration)/net10.0-windows10.0.19041.0/Cida.deps.json" /></ItemGroup>
+    <Copy SourceFiles="@(WorkerFiles)" DestinationFolder="$(TargetDir)" />
+  </Target>
+</Project>
