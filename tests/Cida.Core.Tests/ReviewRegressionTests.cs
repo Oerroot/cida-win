@@ -42,11 +42,12 @@ public sealed class ReviewRegressionTests
     [Fact]
     public void DisabledShortcutsSurviveSaveAndReload()
     {
-        var disabled = Settings with { Shortcut = null, CaptureShortcut = null, LayerShortcut = null };
+        var disabled = Settings with { Shortcut = null, CaptureShortcut = null, LayerShortcut = null, ImproveShortcut = null };
         var restored = CidaSettings.FromJsonText(disabled.ToJsonText());
         Assert.Null(restored.Shortcut);
         Assert.Null(restored.CaptureShortcut);
         Assert.Null(restored.LayerShortcut);
+        Assert.Null(restored.ImproveShortcut);
         Assert.Empty(restored.HeldShortcuts());
     }
 

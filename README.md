@@ -1,116 +1,91 @@
 # 辞达 Cida · Windows 版
 
-[辞达（Cida）](https://github.com/Xuanwo/cida) 的 Windows 移植：在任何应用里用你自己的大模型翻译和润色文字。取自《论语》"辞达而已矣"。
+[Xuanwo/Cida](https://github.com/Xuanwo/cida) 的 Windows 移植。用你自己的模型服务翻译、改进与处理文字；WPF / .NET 10，Apache-2.0。
 
-上游是 Xuanwo 的 macOS 原生应用（Swift/SwiftUI）；本仓库按其产品语义与协议行为，用 C# / .NET 10 / WPF 重写了 Windows 版。Apache-2.0，沿用上游许可。
+## 下载
 
-## 功能
+[v0.2.0-rc.1 候选版](https://github.com/Oerroot/cida-win/releases/tag/v0.2.0-rc.1)：
 
-| 快捷键 | 功能 | 状态 |
-|---|---|---|
-| `Alt+A` | 读取其他应用选中的文字，弹出面板翻译 / 润色（Tab 切换） | ✅ |
-| `Alt+S` | 冻结屏幕 → 框选 → 本地 OCR → 翻译 | ✅（见下方 OCR 说明） |
-| `Alt+D` | 把指针下的段落原处翻译成译文覆盖层，再按还原 | ✅ 基础版 |
-| `Alt+Shift+D` | 翻译前台窗口中的可读文本块，再按还原 | ✅ 基础版 |
+- [Windows x64 安装包](https://github.com/Oerroot/cida-win/releases/download/v0.2.0-rc.1/Cida-win-x64-preview-Setup.exe)
+- [Windows x64 便携包](https://github.com/Oerroot/cida-win/releases/download/v0.2.0-rc.1/Cida-win-x64-preview-Portable.zip)
 
-- 三种协议全支持：OpenAI Chat Completions、OpenAI Responses、Anthropic Messages，以及一切兼容服务（DeepSeek、Moonshot、智谱、OpenRouter、本地模型……）
-- 流式输出；`Esc` 停止，`Enter` 重新生成；右键复制结果
-- API Key 用 DPAPI 加密存储在用户目录；设置与 CLI 共用同一份配置
-- 无 Dock/任务栏常驻：托盘图标 + 全局快捷键
+这是**未签名候选版**。安装包与程序尚无受信任的发布者签名；Windows 可能显示未知发布者提示。请按发布页的 SHA256SUMS 校验来源。无需安装开发证书、身份包、.NET 或额外 OCR 语言包。完整解压便携包后运行根目录的 `辞达 Cida（候选版）.exe`；命令行在 `current/Cida.Cli.exe`。
 
-## 安装与配置
+已有 v0.1.3 用户可手动运行新安装包升级，或完整解压新便携包；配置沿用 `%AppData%\Cida`。新配置含动作列表，回退旧版本前请保存 `settings.json`、备份及密钥文件。旧 tag 和旧发布附件保留。
 
-下载 [v0.1.3 预发布](https://github.com/Oerroot/cida-win/releases/tag/v0.1.3)：[安装版 Setup.exe](https://github.com/Oerroot/cida-win/releases/download/v0.1.3/Cida-win-x64-Setup.exe) 或 [便携版 Portable.zip](https://github.com/Oerroot/cida-win/releases/download/v0.1.3/Cida-win-x64-Portable.zip)。便携版完整解压后运行根目录的 `辞达 Cida.exe`。本版本尚无正式安装程序签名，人工验收边界见发布说明。
+## 界面与使用
 
-发布打包用 [Velopack](https://github.com/velopack/velopack)，提供安装程序与 Portable 包。GUI 和控制台 CLI 均以 win-x64 自包含方式发布，无需另装 .NET：
+![浅色主面板](docs/screenshots/panel-light.png)
+
+以上为真实产品视图的受控渲染，文字来自本地模拟响应。
+
+| 默认快捷键 | 行为 |
+|---|---|
+| `Alt+A` | 带入前台应用选区，执行第一个启用的动作 |
+| `Alt+S` | 冻结指针所在屏幕，框选、本地 OCR、翻译 |
+| `Alt+D` | 翻译指针段落；再按关闭。整窗模式中可切换原文 |
+| `Alt+Shift+D` | 翻译当前窗口完整可见的只读段落；再按关闭 |
+| `Alt+F` | 改进选区并尝试安全替换；处理中再按取消 |
+
+主面板采用白色输入、温暖纸色结果与绿色强调，跟随系统浅深色。中英文阅读字体随包提供。原文、结果分别滚动，长文不会把操作按钮推走。
+
+- `Enter` 执行，`Shift+Enter` 换行，`Tab` / `Shift+Tab` 切换动作。
+- `Esc` 隐藏面板；生成继续。`Ctrl+.` 停止并保留已有结果。
+- `Ctrl+C` 优先复制当前选区，没有选区时复制完整结果；`Ctrl+Shift+C` 复制完整结果图片。
+- `Ctrl+L` 修改常用外语，`Ctrl+,` 打开设置。
+- 编辑原文、切换动作或修改请求配置会标记旧结果，由用户决定是否重新生成。
+
+设置分为模型、动作、快捷键、通用四页。配置先编辑草稿，再保存；测试连接和动作预览不会提前保存。自定义动作可新增、改名、排序、启停与删除；翻译动作始终保留。API Key 可保留、更换或清除，使用 Windows 当前用户 DPAPI 加密保存。
+
+![深色主面板](docs/screenshots/panel-dark.png)
+
+## 配置模型
+
+首次启动点击“配置模型服务”，填写完整端点、协议、模型和密钥，再测试连接。支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 及兼容端点；请求直接发送到用户指定的服务，不保存翻译历史。
+
+CLI 与 GUI 共用配置。也可在设置中复制 AI 配置说明：
 
 ```powershell
-scripts/package.ps1 -Version 0.1.3   # 产出 artifacts/release/0.1.3/ 下的 Setup.exe / Portable.zip / full nupkg
-```
-
-身份包已包含在发布输入中；重新构建用 `scripts/sparse-package.ps1`。开发机需要注册时，显式运行 `scripts/sparse-package.ps1 -Register -ExternalLocation <Cida.exe 所在目录>`。该操作会信任开发证书并注册包；普通构建不会修改信任或包注册。开发期直接：
-
-```powershell
-dotnet run --project windows/Cida.Desktop
-```
-
-配置用命令行（AI 助手友好，语义与上游一致）：
-
-```powershell
-# 发布后在 Portable 的 current 目录或安装目录执行；开发期用 dotnet run --project windows/Cida.Cli -- …
 .\Cida.Cli.exe config set endpoint=https://api.deepseek.com/chat/completions model=deepseek-chat
 Get-Content -Raw 密钥.txt | .\Cida.Cli.exe config set api-key --stdin
 .\Cida.Cli.exe check
 .\Cida.Cli.exe config show --json
+.\Cida.Cli.exe config schema
 ```
 
-全部字段：`Cida.Cli.exe config schema`。GUI 程序 `Cida.exe` 也处理相同命令参数；脚本和管道优先使用控制台程序以便等待退出、读取输出和退出码。
+自定义动作在设置的“动作”页编辑。配置导出省略 API Key；额外请求头、请求体和自定义提示词按原样导出，如自行放入敏感信息，分享前应检查。
 
-## OCR 与包身份（sparse package）
+## OCR、原处翻译与替换
 
-截图翻译使用 `Windows.Media.Ocr`。按微软文档该 API 需要包身份，本项目实现了完整的
-sparse package（packaging with external location）方案，即 PowerToys 打通 OCR 的同款路线：
+OCR 优先使用可用的 Windows 引擎，随包的 Tesseract 简体中文、繁体中文、英文资源提供离线兜底。`probe-identity` 只检查能力；`probe-ocr --offline image.png` 可验证离线识别。截图只在内存中处理。
 
-- `windows/Cida.Desktop/SparsePackage/` 是身份包清单（`runFullTrust` + `AllowExternalContent`）
-- `scripts/sparse-package.ps1` 用 Windows SDK 的 MakeAppx 按清单和图标白名单打包，开发签名使用用户证书库中的不可导出私钥；注册需显式传入 `-Register`
-- 新发布包不包含 PFX/P12 私钥文件，且打包会检查嵌套 MSIX 的内容。发布到其他机器时，包签名还需受目标机器信任；自签名开发证书不等于正式签名
-- 可执行文件内嵌 `<msix>` 绑定清单，进程启动即获得包身份
-- GUI 启动时会尝试幂等注册（`SparsePackageRegistrar`），CLI 可用 `Cida.Cli.exe probe-identity` 自检；签名未受信任时注册仍可能失败
+原处翻译通过隔离子进程读取 UI Automation 文本范围，超时回收子进程。覆盖层不抢焦点、点击穿透，范围跟随窗口和滚动更新；不可编辑的正文才作为目标。代码、按钮、链接控件、密码和编辑控件会跳过。被裁切的段落暂时隐藏；无法持续跟踪或译文无法在原范围内清晰排版时转到面板。未提供可用 UIA 的应用可改用截图。
 
-实测结论（Windows 11 26100+）：即使没有包身份，`OcrEngine` 也能直接创建并识别——
-文档的限制在运行时并未强制。因此 sparse package 是旧版 Windows 的保险层而非硬依赖；
-本仓库已在实机验证两条路径都可用（中文图片 → 识别 → 段落重建）。
+安全替换要求同一来源窗口、进程、控件、选区及文档内容，确认可编辑后才粘贴，并回读验证。无法确认时保留改进结果，先检查原文再决定是否复制。受控 WPF 编辑器已验证一次撤销恢复原文；各外部编辑器的 UIA、粘贴和撤销行为仍以实际应用为准。普通权限应用无法越过 Windows 的管理员窗口隔离。
 
-唯一硬性要求是**语言包**：中文识别依赖系统安装了中文 OCR 语言包
-（设置 → 时间和语言 → 语言和区域 → 中文 → 语言选项）。
+损坏配置会保留原文件并读取上次有效备份；“通用”页可恢复备份、导出配置、查看 OCR / 热键能力和检查更新。候选版本使用 `win-x64-preview` 更新通道；下载安装更新后由用户选择重启。
 
-## 仓库结构
-
-```
-windows/
-  Cida.Core/      协议、配置、提示词、SSE 解析、CLI 语义（85 个单元测试）
-  Cida.Platform/  热键、UIA 选区读取、DPAPI、存储、截图、OCR、原处翻译读取
-  Cida.Desktop/   WPF：托盘、面板、截图框选、设置、覆盖层
-  Cida.Cli/       config / check / probe 命令行入口
-tests/
-  Cida.Core.Tests/
-  Cida.Windows.Tests/  ABI 与受控桌面回归
-scripts/
-  package.ps1     Velopack 打包
-```
-
-## 选区读取的兼容性
-
-跨应用取词是两级策略：优先 UI Automation `TextPattern`，读不到再用合成 `Ctrl+C` + 剪贴板快照恢复兜底。各应用支持程度可用探针实测：
+## 开发与验证
 
 ```powershell
-.\Cida.Cli.exe probe   # 列出所有可见窗口的读取能力矩阵
-```
-
-普通权限进程无法读取管理员权限窗口（UIPI），也无法向其发送合成按键——这是 Windows 的安全边界。
-
-## 测试与构建
-
-```powershell
-dotnet build windows
-dotnet test tests/Cida.Core.Tests
-dotnet test tests/Cida.Windows.Tests
-# 交互式 Windows 桌面的受控集成验证（会短暂显示测试窗口，保存并恢复剪贴板）
-$env:CIDA_DESKTOP_TESTS = "1"
-dotnet test tests/Cida.Windows.Tests
+dotnet build windows -c Release
+dotnet test tests/Cida.Core.Tests -c Release
+dotnet test tests/Cida.Windows.Tests -c Release
+$env:CIDA_DESKTOP_TESTS = '1'
+dotnet test tests/Cida.Windows.Tests -c Release
 Remove-Item Env:\CIDA_DESKTOP_TESTS
+dotnet run --project tests/Cida.VisualChecks -- --render-suite
+pwsh -File scripts/package.ps1 -Version 0.2.0-rc.1
 ```
 
-评审修复与验证边界见 [review-fixes.md](docs/review-fixes.md)。跨应用兼容性、完整中文 IME 交互和干净机器安装仍需单独人工验证。
+交互桌面测试短暂显示自有测试窗口并保存、恢复剪贴板，运行时应关闭其他辞达进程。视觉验收工具仅使用本地模拟响应和独立配置。`CIDA_PROFILE` 可将 GUI / CLI 配置与单实例通信隔离到指定目录。
 
-发布流程：添加 `docs/releases/vX.Y.Z.md` 发布说明，提交后创建并推送 `vX.Y.Z` tag。GitHub Actions 会构建、运行 Core/Windows ABI 测试、打包并上传预发布附件；交互式桌面测试需在本地另行执行。已存在的 Release 会保留其附件。
+打包依赖 vpk 1.2.161 与具有合法再分发权的 Visual Studio VC runtime 文件。脚本核验 Microsoft 签名后应用本地部署运行库，检查候选包不包含私钥、证书或 MSIX，并拒绝覆盖已有版本输出。
 
-## 与上游的关系
+当前证据与剩余边界见 [Windows 体验验证记录](docs/windows-experience-verification.md)。代码实现、受控渲染、真实窗口交互、干净机器安装与正式签名分别记录。完整中文 IME 候选提交、外部应用矩阵、混合 DPI 多屏、干净系统安装/升级/卸载仍不作为本候选版已通过的项目。
 
-- 协议行为、配置字段、CLI 语义、提示词契约按上游 `Design/spec` 对齐，测试用例覆盖三种格式的流式与非流式响应
-- UI 为 WPF 重写，交互参考上游设计（无激活面板、点击穿透覆盖层、冻结屏幕框选）
-- 上游演进后，配置 JSON 与 CLI 字段保持同构，便于跨平台迁移
+发布流程：添加 `docs/releases/vX.Y.Z[-rc.N].md`，提交后创建新 tag。GitHub Actions 构建、运行非交互测试、生成并上传预发布包；不会改写已有 tag 或替换既有发布附件。
 
-## 许可
+## 许可与来源
 
-Apache-2.0。基于 [Xuanwo/cida](https://github.com/Xuanwo/cida) 的工作。
+[Apache-2.0](LICENSE)。上游设计及品牌来源固定到 `473013c93e052e08603ffd2faccda0d6dafbb5be`；Source Serif 4 和 Noto Serif SC 静态派生字体使用新名称 Cida Serif / Cida Chinese Serif，附 SIL OFL。OCR 引擎、模型、Leptonica 和 VC runtime 的来源、许可与哈希见 [NOTICE](NOTICE) 及随包 provenance 文件。

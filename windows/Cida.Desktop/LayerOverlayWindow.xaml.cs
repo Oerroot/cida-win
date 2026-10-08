@@ -35,20 +35,20 @@ public sealed class LayerOverlayWindow : Window
         // The "paper" behind the translation, as the upstream layer draws it.
         var paper = new System.Windows.Controls.Border
         {
-            Background = new SolidColorBrush(Color.FromArgb(248, 248, 247, 244)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(64, 0x1F, 0x1D, 0x1A)),
             BorderThickness = new Thickness(0.5),
             CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(6, 4, 6, 4),
+            Padding = new Thickness(2, 0.5, 2, 0.5),
             Child = _text,
+            ClipToBounds = true,
         };
-        _text.Foreground = new SolidColorBrush(Color.FromRgb(0x1F, 0x1D, 0x1A));
+        paper.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "Paper");
+        paper.SetResourceReference(System.Windows.Controls.Border.BorderBrushProperty, "PanelBorder");
+        _text.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "Ink");
         _text.Text = translation;
         Content = paper;
 
-        // Place over the paragraph; grow past its width rather than clip the meaning.
-        MaxHeight = 320;
-        SizeToContent = SizeToContent.Height;
+        // Keep the source bounds; oversized translations are retained in the main panel.
+        SizeToContent = SizeToContent.Manual;
 
         SourceInitialized += (_, _) =>
         {
@@ -57,11 +57,24 @@ public sealed class LayerOverlayWindow : Window
         };
     }
 
-    public void MoveToBounds(System.Drawing.RectangleF bounds) => WindowPlacement.Overlay(this, bounds);
-    public void SetText(string text) => _text.Text = text;
+    public bool Fits { get; private set; } = true;
+    public string FullText => _text.Text;
+    public void MoveToBounds(System.Drawing.RectangleF bounds) { WindowPlacement.Overlay(this, bounds); Fit(); }
+    public void SetText(string text) { _text.Text = text; Fit(); }
+    private void Fit()
+    {
+        var width = Math.Max(1, Width - 5); var height = Math.Max(1, Height - 2);
+        Fits = false;
+        for (var size = 14d; size >= 11; size -= 0.5)
+        {
+            _text.FontSize = size; _text.Measure(new Size(width, double.PositiveInfinity));
+            if (_text.DesiredSize.Height <= height) { Fits = true; break; }
+        }
+        _text.Visibility = Fits ? Visibility.Visible : Visibility.Hidden;
+    }
 
     /// <summary>Appends a streamed piece of the translation.</summary>
-    public void Append(string piece) => _text.Text += piece;
+    public void Append(string piece) => SetText(_text.Text + piece);
 
     private void MakeClickThrough()
     {

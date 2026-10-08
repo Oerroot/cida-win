@@ -7,5 +7,22 @@ licensed under the Apache License, Version 2.0.
 
 The macOS original's product semantics, protocol behavior, prompt
 contract and interaction design were studied and reimplemented for
-Windows in C# / .NET / WPF. No source code from the original
-repository is included in this project.
+Windows in C# / .NET / WPF. Brand glyphs and font sources are derived
+from upstream commit 473013c93e052e08603ffd2faccda0d6dafbb5be.
+
+Source Serif 4: Copyright Adobe, SIL Open Font License 1.1.
+Noto Serif SC: Copyright the Noto project authors, SIL Open Font License 1.1.
+Modified static fonts are renamed Cida Serif / Cida Chinese Serif.
+See Assets/Fonts/OFL-*.txt and Assets/provenance.json.
+
+Tesseract .NET wrapper 5.2.0: Copyright Charles Weld, Apache-2.0.
+Tesseract OCR engine: Copyright Google and contributors, Apache-2.0.
+Tessdata fast trained data: Apache-2.0, commit
+87416418657359cb625c412a48b6e1d6d41c29bd (eng, chi_sim, chi_tra).
+Leptonica 1.82.0: Copyright Dan Bloomberg and contributors, BSD-2-Clause.
+See licenses/ and tessdata/LICENSE.
+
+Microsoft Visual C++ runtime files are distributed app-locally from the
+licensed Visual Studio redistributable directory under Microsoft's
+redistribution terms. Microsoft retains all rights to these components.
+See vc-runtime-provenance.json in packaged builds.

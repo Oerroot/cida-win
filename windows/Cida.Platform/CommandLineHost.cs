@@ -13,9 +13,17 @@ public static class CommandLineHost
             if (arguments.FirstOrDefault() == "probe-identity")
             {
                 Console.WriteLine($"包身份: {SparsePackageRegistrar.HasPackageIdentity()}");
-                Console.WriteLine($"注册结果: {new SparsePackageRegistrar().EnsureRegistered()}");
-                Console.WriteLine($"中文 OCR 可用: {new LocalOcr().IsAvailable()}");
+                Console.WriteLine(LocalOcr.CapabilitySummary());
                 return 0;
+            }
+            if (arguments.FirstOrDefault() == "probe-ocr")
+            {
+                if (arguments.Count < 2 || !File.Exists(arguments[^1])) { Console.Error.WriteLine("Usage: Cida.Cli.exe probe-ocr [--offline] <image.png>"); return 2; }
+                var bytes = File.ReadAllBytes(arguments[^1]);
+                using var bitmap = new System.Drawing.Bitmap(new MemoryStream(bytes));
+                var lines = await new LocalOcr().RecognizeAsync(bytes, bitmap.Width, bitmap.Height, forceFallback: arguments.Contains("--offline"));
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { count = lines?.Count ?? 0, text = string.Join("\n\n", RecognizedLayout.Paragraphs(lines ?? []).Select(p => p.Text)), identity = SparsePackageRegistrar.HasPackageIdentity() }));
+                return lines is { Count: > 0 } ? 0 : 1;
             }
             var environment = Environment.GetEnvironmentVariables()
                 .Cast<System.Collections.DictionaryEntry>()

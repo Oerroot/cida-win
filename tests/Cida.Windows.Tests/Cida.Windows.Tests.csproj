@@ -12,5 +12,10 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <ProjectReference Include="../../windows/Cida.Desktop/Cida.Desktop.csproj" />
+    <Content Include="../../windows/Cida.Desktop/Assets/Fonts/CidaChineseSerif.ttf" Link="fixtures/CidaChineseSerif.ttf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="CopyAccessibilityWorker" AfterTargets="Build">
+    <ItemGroup><WorkerFiles Include="../../windows/Cida.Desktop/bin/$(Configuration)/net10.0-windows10.0.19041.0/Cida.exe;../../windows/Cida.Desktop/bin/$(Configuration)/net10.0-windows10.0.19041.0/Cida.runtimeconfig.json;../../windows/Cida.Desktop/bin/$(Configuration)/net10.0-windows10.0.19041.0/Cida.deps.json" /></ItemGroup>
+    <Copy SourceFiles="@(WorkerFiles)" DestinationFolder="$(TargetDir)" />
+  </Target>
 </Project>

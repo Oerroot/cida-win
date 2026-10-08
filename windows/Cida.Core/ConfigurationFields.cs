@@ -42,6 +42,7 @@ public enum ConfigurationField
     Shortcut,
     CaptureShortcut,
     LayerShortcut,
+    ImproveShortcut,
     LaunchAtLogin,
 }
 
@@ -74,6 +75,7 @@ public static class ConfigurationFieldExtensions
         ConfigurationField.Shortcut => "shortcut",
         ConfigurationField.CaptureShortcut => "capture-shortcut",
         ConfigurationField.LayerShortcut => "layer-shortcut",
+        ConfigurationField.ImproveShortcut => "improve-shortcut",
         ConfigurationField.LaunchAtLogin => "launch-at-login",
         _ => throw new ArgumentOutOfRangeException(nameof(field)),
     };
@@ -142,6 +144,8 @@ public static class ConfigurationFieldExtensions
         ConfigurationField.LayerShortcut => new Schema(
             "shortcut", null, GlobalShortcut.AltD.ConfigurationText, "control+alt+d",
             "原处翻译的快捷键：把指针下这一段换成译文、再按换回；加 shift 翻译整个窗口。写法同 shortcut（none 表示不设置），不能带 shift，三个快捷键（含加 shift 的这个）不能相同"),
+        ConfigurationField.ImproveShortcut => new Schema("shortcut", null, GlobalShortcut.AltF.ConfigurationText,
+            "control+alt+f", "改进并安全替换选区；再次按下取消。none 表示关闭。"),
         ConfigurationField.LaunchAtLogin => new Schema(
             "boolean", ["true", "false"], "false", "true",
             "开机启动，与设置里的开关相同"),
@@ -234,7 +238,7 @@ public static class ConfigurationFieldExtensions
                 break;
             }
             case ConfigurationField.Shortcut or ConfigurationField.CaptureShortcut
-                or ConfigurationField.LayerShortcut:
+                or ConfigurationField.LayerShortcut or ConfigurationField.ImproveShortcut:
             {
                 var action = field.ShortcutAction()!.Value;
                 if (value.ToLowerInvariant() == GlobalShortcut.NoneConfigurationText)
@@ -323,6 +327,9 @@ public static class ConfigurationFieldExtensions
             case ConfigurationField.LayerShortcut:
                 settings = settings.WithShortcut(defaults.LayerShortcut, GlobalShortcutAction.TranslationLayer);
                 break;
+            case ConfigurationField.ImproveShortcut:
+                settings = settings.WithShortcut(defaults.ImproveShortcut, GlobalShortcutAction.ImproveAndReplace);
+                break;
             case ConfigurationField.LaunchAtLogin:
                 configuration = configuration with { LaunchAtLogin = false };
                 settings = settings with { LaunchAtLogin = false };
@@ -342,7 +349,7 @@ public static class ConfigurationFieldExtensions
             throw new InvalidConfiguration(ConfigurationField.LayerShortcut,
                 "layer-shortcut 不能带 shift：加 shift 是翻译整个窗口");
         }
-        foreach (var field in new[] { ConfigurationField.Shortcut, ConfigurationField.CaptureShortcut })
+        foreach (var field in new[] { ConfigurationField.Shortcut, ConfigurationField.CaptureShortcut, ConfigurationField.ImproveShortcut })
         {
             if (settings.LayerShortcut != null
                 && settings.ShortcutFor(field.ShortcutAction()!.Value)
@@ -352,7 +359,7 @@ public static class ConfigurationFieldExtensions
                     $"{field.RawValue()} 不能与 layer-shortcut 加 shift 相同（翻译整个窗口）");
             }
         }
-        var fields = new[] { ConfigurationField.Shortcut, ConfigurationField.CaptureShortcut, ConfigurationField.LayerShortcut };
+        var fields = new[] { ConfigurationField.Shortcut, ConfigurationField.CaptureShortcut, ConfigurationField.LayerShortcut, ConfigurationField.ImproveShortcut };
         for (var index = 0; index < fields.Length; index++)
         {
             foreach (var earlier in fields[..index])
@@ -374,6 +381,7 @@ public static class ConfigurationFieldExtensions
         ConfigurationField.Shortcut => GlobalShortcutAction.ShowPanel,
         ConfigurationField.CaptureShortcut => GlobalShortcutAction.CaptureText,
         ConfigurationField.LayerShortcut => GlobalShortcutAction.TranslationLayer,
+        ConfigurationField.ImproveShortcut => GlobalShortcutAction.ImproveAndReplace,
         _ => null,
     };
 
@@ -456,7 +464,7 @@ public static class ConfigurationFieldExtensions
             case ConfigurationField.ImprovementPrompt:
                 return Core.JsonValue.String(settings.ImprovementPrompt);
             case ConfigurationField.Shortcut or ConfigurationField.CaptureShortcut
-                or ConfigurationField.LayerShortcut:
+                or ConfigurationField.LayerShortcut or ConfigurationField.ImproveShortcut:
                 return Core.JsonValue.String(
                     settings.ShortcutFor(field.ShortcutAction()!.Value)?.ConfigurationText
                     ?? GlobalShortcut.NoneConfigurationText);

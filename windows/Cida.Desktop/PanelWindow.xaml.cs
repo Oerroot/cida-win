@@ -1,321 +1,246 @@
 using Cida.Core;
 using Cida.Platform;
-using System.Runtime.InteropServices;
-using System.Windows.Interop;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-
-
-
+using System.Windows.Documents;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace Cida.Desktop;
 
-/// <summary>
-/// The floating panel: shows the frontmost selection, streams the reply, and switches
-/// between translation and improvement. The window does not take focus from the source
-/// application until the composer is clicked (WS_EX_NOACTIVATE until then).
-/// </summary>
-public sealed class PanelWindow : Window
+public partial class PanelWindow : Window
 {
-    /// <summary>What the selection reader produced for one show.</summary>
     public sealed record Submission(string Text, SelectionReader Reader);
-
     private readonly AppModel _model;
-    private readonly System.Windows.Controls.TextBox _composer = new();
-    private readonly System.Windows.Controls.TextBlock _result = new();
-    private readonly System.Windows.Controls.TextBlock _note = new();
-    private readonly System.Windows.Controls.Button _modeSwitch = new();
-    private ProcessingMode _mode = ProcessingMode.Translate;
+    private readonly TextBox _composer;
+    public PanelState State { get; } = new();
     private CancellationTokenSource? _cancellation;
-    private ResultPhase _phase = ResultPhase.Completed;
+    private readonly DispatcherTimer _renderClock = new() { Interval = TimeSpan.FromMilliseconds(60) };
+    private long _stateSerial;
+    private int _selectionSerial;
+    private string _lastImported = "";
+    private string _rendered = "";
+    private bool _composing;
+    private bool _renderQueued;
+    private bool _formatted;
+    private bool _recognizing;
+    private ProcessingAction? _retainedAction;
+    private IReadOnlyList<ProcessingAction> DisplayedActions => _retainedAction != null && _model.Settings.EnabledActions.All(a => a.Id != _retainedAction.Id)
+        ? _model.Settings.EnabledActions.Append(_retainedAction).ToArray() : _model.Settings.EnabledActions;
+    private DateTime _shownAt;
 
     public PanelWindow(AppModel model)
     {
-        _model = model;
-        Title = "辞达";
-        Width = 560;
-        SizeToContent = SizeToContent.Height;
-        MaxHeight = 640;
-        WindowStyle = WindowStyle.None;
-        ResizeMode = ResizeMode.NoResize;
-        ShowInTaskbar = false;
+        _model = model; ThemeService.Apply(); InitializeComponent(); _composer = Composer;
         ShowActivated = false;
-        Topmost = true;
-        Background = FindResource("PanelBackground") as Brush;
-        BorderBrush = FindResource("PanelBorder") as Brush;
-        BorderThickness = new Thickness(1);
-        FontFamily = new FontFamily(new Uri("pack://application:,,,/"), "./#Microsoft YaHei UI");
-
-        var root = new System.Windows.Controls.StackPanel { Margin = new Thickness(16) };
-
-        var header = new System.Windows.Controls.Grid();
-        header.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        header.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = GridLength.Auto });
-        var title = new System.Windows.Controls.TextBlock
-        {
-            Text = "翻译",
-            FontSize = 12,
-            Foreground = FindResource("InkSecondary") as Brush,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        _modeSwitch.Content = "⇄ 改进";
-        _modeSwitch.Cursor = System.Windows.Input.Cursors.Hand;
-        _modeSwitch.Background = Brushes.Transparent;
-        _modeSwitch.BorderThickness = new Thickness(0);
-        _modeSwitch.Foreground = FindResource("Accent") as Brush;
-        _modeSwitch.Click += (_, _) => SwitchMode();
-        System.Windows.Controls.Grid.SetColumn(title, 0);
-        System.Windows.Controls.Grid.SetColumn(_modeSwitch, 1);
-        header.Children.Add(title);
-        header.Children.Add(_modeSwitch);
-        root.Children.Add(header);
-        _titleText = title;
-
-        _composer.AcceptsReturn = false;
-        _composer.TextWrapping = TextWrapping.Wrap;
-        _composer.FontSize = 14;
-        _composer.Padding = new Thickness(0);
-        _composer.Margin = new Thickness(0, 8, 0, 0);
-        _composer.BorderThickness = new Thickness(0);
-        _composer.Background = Brushes.Transparent;
-        _composer.Foreground = FindResource("Ink") as Brush;
-        _composer.KeyDown += OnComposerKeyDown;
-        root.Children.Add(_composer);
-
-        _result.TextWrapping = TextWrapping.Wrap;
-        _result.FontSize = 15;
-        _result.Margin = new Thickness(0, 12, 0, 0);
-        _result.Foreground = FindResource("Ink") as Brush;
-        root.Children.Add(_result);
-
-        _note.FontSize = 12;
-        _note.Margin = new Thickness(0, 8, 0, 0);
-        _note.Foreground = FindResource("InkSecondary") as Brush;
-        _note.Visibility = Visibility.Collapsed;
-        root.Children.Add(_note);
-
-        Content = root;
-
-        SourceInitialized += (_, _) =>
-        {
-            PlaceNearCaret();
-            MakeNonActivating();
-        };
-        Deactivated += (_, _) => { };
+        if (Environment.GetEnvironmentVariable("CIDA_UI_INSPECTION") == "1") ShowInTaskbar = true;
+        State.ActionId = model.Settings.EnabledActions.First().Id;
+        RefreshActions(); RefreshConfiguration();
         PreviewKeyDown += OnPanelKeyDown;
-
-        // The panel shows without stealing focus; clicking the composer must make IME
-        // composition possible, which needs a real activation: drop WS_EX_NOACTIVATE
-        // and focus the editor (the upstream nonactivating panel focuses on click too).
-        _composer.PreviewMouseLeftButtonDown += (_, _) => ActivateForInput();
-        _composer.GotKeyboardFocus += (_, _) =>
+        TextCompositionManager.AddPreviewTextInputStartHandler(Composer, (_, _) => _composing = true);
+        TextCompositionManager.AddPreviewTextInputHandler(Composer, (_, _) => _composing = false);
+        _renderClock.Tick += (_, _) => { if (_renderQueued) RenderResult(); };
+        _renderClock.Start();
+        IsVisibleChanged += (_, _) => { if (IsVisible) _shownAt = DateTime.UtcNow; DevelopmentTrace.Stage("panel visible=" + IsVisible); };
+        SourceInitialized += (_, _) => WindowPlacement.NearCursor(this);
+        TitleBar.MouseLeftButtonDown += (_, e) => { if (e.LeftButton == MouseButtonState.Pressed) DragMove(); };
+        Closed += (_, _) => { _cancellation?.Cancel(); _renderClock.Stop(); };
+        Deactivated += (_, _) =>
         {
-            // Focus can also arrive by keyboard: make sure the window is not still
-            // WS_EX_NOACTIVATE, or the IME cannot attach its composition context.
-            var helper = new WindowInteropHelper(this);
-            var style = GetWindowLong(helper.Handle, GWL_EXSTYLE);
-            if ((style & WS_EX_NOACTIVATE) != 0)
-            {
-                ActivateForInput();
-            }
+            if (Environment.GetEnvironmentVariable("CIDA_UI_INSPECTION") != "1" && !_composing && IsVisible && !_model.IsSettingsVisible && DateTime.UtcNow - _shownAt > TimeSpan.FromMilliseconds(300)) Hide();
         };
-        Closed += (_, _) => _cancellation?.Cancel();
-        _composer.LostKeyboardFocus += (_, _) => { };
     }
-
-    private readonly System.Windows.Controls.TextBlock _titleText;
-
-    private void SwitchMode()
+    public void RefreshConfiguration()
     {
-        _mode = _mode == ProcessingMode.Translate ? ProcessingMode.Improve : ProcessingMode.Translate;
-        _titleText.Text = _mode == ProcessingMode.Translate ? "翻译" : "改进";
-        _modeSwitch.Content = _mode == ProcessingMode.Translate ? "⇄ 改进" : "⇄ 翻译";
+        ConfigureButton.Visibility = _model.Settings.IsModelServiceComplete ? Visibility.Collapsed : Visibility.Visible;
+        EmptyHint.Text = _model.Settings.IsModelServiceComplete
+            ? "输入后按 Enter 执行 · Tab 切换动作"
+            : "先配置模型服务，再开始翻译与改进。";
+        RefreshActions();
     }
-
-    private int _selectionSerial;
-
+    public void RefreshActions()
+    {
+        if (!IsInitialized) return;
+        var actions = DisplayedActions;
+        if (actions.All(a => a.Id != State.ActionId)) State.ActionId = actions.First().Id;
+        ActionButtons.Children.Clear();
+        foreach (var action in actions)
+        {
+            var button = new Button { Content = action.Name, Margin = new Thickness(0, 0, 4, 0), ToolTip = action.Name + " · Tab 切换" };
+            button.SetResourceReference(Control.ForegroundProperty, action.Id == State.ActionId ? "Accent" : "InkSecondary");
+            button.SetResourceReference(Control.BackgroundProperty, action.Id == State.ActionId ? "AccentSoft" : "PanelBackground");
+            button.Click += (_, _) => { State.ActionId = action.Id; RefreshActions(); RefreshStatus(); };
+            ActionButtons.Children.Add(button);
+        }
+    }
     public async Task BringInSelectionAsync()
     {
-        MakeNonActivating();
-        PlaceNearCaret();
+        WindowPlacement.NearCursor(this);
         var serial = ++_selectionSerial;
         var submission = await _model.ReadSelectionAsync();
         if (serial != _selectionSerial || !IsVisible) return;
-        if (submission is { } value)
+        if (submission is { } value && value.Text != _lastImported)
         {
-            _composer.Text = value.Text;
-            _composer.Select(value.Text.Length, 0);
+            _lastImported = value.Text;
+            SetSourceText(value.Text);
+            State.ActionId = _model.Settings.EnabledActions.First().Id; RefreshActions();
             SubmitCurrent();
         }
-        else
-        {
-            _composer.Text = "";
-        }
+        Activate(); Composer.Focus(); Composer.CaretIndex = Composer.Text.Length;
     }
-
-    public void SetSourceText(string text)
+    public void FocusInput() { Activate(); Composer.Focus(); }
+    public void SetSourceText(string text) { ++_selectionSerial; Composer.Text = text; }
+    public void UseTranslation() { State.ActionId = ProcessingAction.TranslationId; RefreshActions(); }
+    private void OnSourceChanged(object sender, TextChangedEventArgs e)
     {
-        ++_selectionSerial;
-        _composer.Text = text;
+        State.Source = Composer.Text;
+        if (SourceCount == null) return;
+        SourceCount.Text = Composer.Text.Length == 0 ? "" : $"{Composer.Text.Length:N0} 字符";
+        ComposerHint.Visibility = Composer.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        RefreshStatus();
     }
-
-    private void OnComposerKeyDown(object sender, System.Windows.Input.KeyEventArgs arguments)
+    private void OnPanelKeyDown(object sender, KeyEventArgs e)
     {
-        if (arguments.Key == System.Windows.Input.Key.Return
-            && (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) == 0)
+        if (_composing || e.Key is Key.ImeProcessed or Key.DeadCharProcessed) return;
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        var modifiers = Keyboard.Modifiers;
+        if (key == Key.Escape) { Hide(); e.Handled = true; }
+        else if (key == Key.Enter && modifiers == ModifierKeys.None) { SubmitCurrent(); e.Handled = true; }
+        else if (key == Key.Tab && (modifiers == ModifierKeys.None || modifiers == ModifierKeys.Shift))
         {
-            arguments.Handled = true;
-            SubmitCurrent();
+            var actions = DisplayedActions;
+            var index = actions.ToList().FindIndex(a => a.Id == State.ActionId);
+            State.ActionId = actions[(index + (modifiers == ModifierKeys.Shift ? actions.Count - 1 : 1)) % actions.Count].Id;
+            RefreshActions(); RefreshStatus(); e.Handled = true;
         }
-        if (arguments.Key == System.Windows.Input.Key.Tab)
+        else if (key == Key.OemPeriod && modifiers == ModifierKeys.Control) { _model.StopRecognition(); StopResult(); e.Handled = true; }
+        else if (key == Key.OemComma && modifiers == ModifierKeys.Control) { Hide(); _model.ShowSettings(); e.Handled = true; }
+        else if (key == Key.L && modifiers == ModifierKeys.Control) { ShowLanguageEditor(); e.Handled = true; }
+        else if (key == Key.C && modifiers == (ModifierKeys.Control | ModifierKeys.Shift)) { CopyImage(); e.Handled = true; }
+        else if (key == Key.C && modifiers == ModifierKeys.Control)
         {
-            arguments.Handled = true;
-            SwitchMode();
+            var hasSelection = Composer.IsKeyboardFocusWithin ? Composer.SelectionLength > 0 : ResultView.IsKeyboardFocusWithin && !ResultView.Selection.IsEmpty;
+            if (!hasSelection) { CopyResult(); e.Handled = true; }
         }
     }
-
-    private void OnPanelKeyDown(object sender, System.Windows.Input.KeyEventArgs arguments)
+    private void ShowLanguageEditor()
     {
-        if (arguments.Key == System.Windows.Input.Key.Escape)
+        var editor = new TextBox { Text = _model.Settings.ForeignLanguage, MinWidth = 200 };
+        var popup = new System.Windows.Controls.Primitives.Popup { PlacementTarget = ActionButtons, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom, StaysOpen = false };
+        var save = new Button { Content = "应用", Margin = new Thickness(8, 0, 0, 0) };
+        var row = new StackPanel { Orientation = Orientation.Horizontal }; row.Children.Add(editor); row.Children.Add(save);
+        var content = new StackPanel(); content.Children.Add(new TextBlock { Text = "常用外语", Margin = new Thickness(0, 0, 0, 8) }); content.Children.Add(row);
+        var border = new Border { Child = content, Padding = new Thickness(16), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8) };
+        border.SetResourceReference(Border.BackgroundProperty, "PanelBackground"); border.SetResourceReference(Border.BorderBrushProperty, "PanelBorder");
+        popup.Child = border;
+        void Apply()
         {
-            arguments.Handled = true;
-            if (_phase == ResultPhase.Streaming)
-            {
-                StopResult();
-            }
-            else
-            {
-                Hide();
-            }
+            var language = editor.Text.Trim();
+            if (language.Length == 0 || language.Contains('\n')) return;
+            try { _model.SaveSettings(_model.Settings with { ForeignLanguage = language }); popup.IsOpen = false; RefreshStatus(); }
+            catch (Exception) { Note.Text = "语言设置保存失败，请在设置中重试。"; }
         }
-        if (arguments.Key == System.Windows.Input.Key.Return
-            && ReferenceEquals(System.Windows.Input.Keyboard.FocusedElement, _result)
-            && (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) == 0)
-        {
-            arguments.Handled = true;
-            SubmitCurrent();
-        }
+        save.Click += (_, _) => Apply(); editor.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Apply(); e.Handled = true; } };
+        popup.IsOpen = true; editor.Focus(); editor.SelectAll();
     }
-
     public void SubmitCurrent()
     {
-        var text = _composer.Text.Trim();
-        if (text.Length == 0) return;
-        _model.Submit(this, text, _mode);
+        if (!ExecuteButton.IsEnabled) return;
+        var text = Composer.Text;
+        if (string.IsNullOrWhiteSpace(text)) { Composer.Focus(); return; }
+        var action = DisplayedActions.First(a => a.Id == State.ActionId);
+        _model.Submit(this, text, action);
     }
-
-    // MARK: result phases
-
-    public void BeginResult(ProcessingMode mode, string source)
+    public void RetainResult(ProcessingAction action, string source, string result, string note)
+    {
+        _retainedAction = action; SetSourceText(source); State.ActionId = action.Id; RefreshActions();
+        BeginResult(action, source); AppendResult(result); CompleteResult(); ShowMessage(note);
+    }
+    public void BeginResult(ProcessingAction action, string source)
     {
         _cancellation?.Cancel();
-        _phase = ResultPhase.Streaming;
-        _result.Text = "";
-        _note.Visibility = Visibility.Collapsed;
-        // A faint caret while the first characters travel.
-        _result.Text = "▍";
+        _stateSerial = State.Begin(source, action.Id, _model.RequestFingerprint(action));
+        _rendered = ""; _formatted = false; ResultView.Document.Blocks.Clear(); RetryCapture.Visibility = Visibility.Collapsed;
+        ResultTitle.Text = action.Id == ProcessingAction.TranslationId ? "译文" : action.Name + "结果";
+        EmptyTitle.Text = "正在处理…"; EmptyHint.Text = "结果会在这里逐步显示。"; ConfigureButton.Visibility = Visibility.Collapsed;
+        _renderQueued = true; RenderResult();
     }
-
-    public void AppendResult(string piece)
+    public void AppendResult(string piece) { if (State.Append(_stateSerial, piece)) _renderQueued = true; }
+    public void CompleteResult() { State.Finish(_stateSerial, ResultPhase.Completed); _renderQueued = true; RenderResult(); }
+    public void FailResult(string message) { State.Finish(_stateSerial, ResultPhase.Failed, message); _renderQueued = true; RenderResult(); }
+    public void StopResult() { _cancellation?.Cancel(); State.Stop(); _renderQueued = true; RenderResult(); }
+    public void BindCancellation(CancellationTokenSource cancellation) { _cancellation?.Cancel(); _cancellation = cancellation; }
+    public void UnbindCancellation(CancellationTokenSource cancellation) { if (ReferenceEquals(_cancellation, cancellation)) _cancellation = null; }
+    public void ShowMessage(string message, bool retryCapture = false)
     {
-        if (_result.Text == "▍")
+        Note.Text = message; RetryCapture.Visibility = retryCapture ? Visibility.Visible : Visibility.Collapsed;
+    }
+    public void ShowRecognitionState(string? error = null)
+    {
+        _recognizing = error == null;
+        UseTranslation(); ShowMessage(error ?? "正在本地识别文字…", error != null);
+        ExecuteButton.IsEnabled = error != null;
+        StopButton.Visibility = error == null ? Visibility.Visible : Visibility.Collapsed;
+    }
+    public void FinishRecognition() { _recognizing = false; ExecuteButton.IsEnabled = true; StopButton.Visibility = State.Phase == ResultPhase.Streaming ? Visibility.Visible : Visibility.Collapsed; }
+    private void RenderResult()
+    {
+        _renderQueued = false;
+        var result = State.Result;
+        var follow = ResultView.VerticalOffset >= ResultView.ExtentHeight - ResultView.ViewportHeight - 24;
+        if (result != _rendered || (State.Phase != ResultPhase.Streaming && !_formatted))
         {
-            _result.Text = piece;
-        }
-        else
-        {
-            _result.Text += piece;
-        }
-    }
-
-    public void CompleteResult()
-    {
-        _phase = ResultPhase.Completed;
-        if (_result.Text == "▍") _result.Text = "";
-    }
-
-    public void FailResult(string message)
-    {
-        _phase = ResultPhase.Failed;
-        _note.Text = $"请求失败：{message} 按 ⏎ 重试";
-        _note.Visibility = Visibility.Visible;
-    }
-
-    public void StopResult()
-    {
-        _cancellation?.Cancel();
-        _phase = ResultPhase.Stopped;
-        if (_result.Text.EndsWith("▍")) _result.Text = _result.Text[..^1];
-        _note.Text = "已停止 · ⏎ 重新生成";
-        _note.Visibility = Visibility.Visible;
-    }
-
-    public void BindCancellation(CancellationTokenSource cancellation)
-    {
-        _cancellation?.Cancel();
-        _cancellation = cancellation;
-    }
-
-    /// <summary>Copies the result; the tray and the Escape flow stay the only other exits.</summary>
-    protected override void OnMouseRightButtonUp(System.Windows.Input.MouseButtonEventArgs arguments)
-    {
-        base.OnMouseRightButtonUp(arguments);
-        if (_result.Text.Length > 0)
-        {
-            try
+            if (State.Phase == ResultPhase.Streaming)
             {
-                System.Windows.Forms.Clipboard.SetText(_result.Text);
-                _note.Text = "已复制";
-                _note.Visibility = Visibility.Visible;
+                if (ResultView.Document.Blocks.Count == 0) ResultView.Document.Blocks.Add(new Paragraph { Margin = new Thickness(0) });
+                ((Paragraph)ResultView.Document.Blocks.FirstBlock).Inlines.Add(new Run(result[_rendered.Length..]));
             }
-            catch
-            {
-                // The clipboard can be momentarily held by another process.
-            }
+            else { ResultDocument.Render(ResultView.Document, result); _formatted = true; }
+            _rendered = result;
+            if (follow) ResultView.ScrollToEnd();
         }
+        EmptyResult.Visibility = result.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        CopyButton.IsEnabled = ImageButton.IsEnabled = result.Length > 0;
+        RefreshStatus();
     }
-
-    // MARK: placement and activation
-
-    private void PlaceNearCaret()
+    private void RefreshStatus()
     {
-        WindowPlacement.NearCursor(this);
+        if (Note == null) return;
+        StopButton.Visibility = _recognizing || State.Phase == ResultPhase.Streaming ? Visibility.Visible : Visibility.Collapsed;
+        if (_recognizing) return;
+        ExecuteButton.Content = State.HasSubmission ? "重新生成 ↵" : "执行 ↵";
+        PhaseLabel.Text = !State.HasSubmission ? "" : State.Phase switch
+        { ResultPhase.Streaming => "生成中", ResultPhase.Stopped => "已停止", ResultPhase.Failed => "失败", _ => "" };
+        var action = _model.Settings.EffectiveActions.FirstOrDefault(a => a.Id == State.SubmittedActionId);
+        var changedConfig = action != null && State.SubmittedConfiguration != _model.RequestFingerprint(action);
+        Note.SetResourceReference(TextBlock.ForegroundProperty, State.Phase == ResultPhase.Failed ? "Error" : "InkSecondary");
+        Note.Text = State.IsStale ? State.StaleReason + " · Enter 重新生成"
+            : changedConfig ? "语言或配置已改变 · Enter 重新生成"
+            : State.Phase == ResultPhase.Failed ? "请求失败：" + State.Error + " · 可重新生成"
+            : State.Phase == ResultPhase.Stopped ? "已停止，已有结果已保留。"
+            : State.HasSubmission ? "" : SettingsFileStore.RecoveryNote ?? "Enter 执行 · Shift+Enter 换行";
     }
-
-    private void MakeNonActivating()
+    private void CopyResult()
     {
-        // WS_EX_NOACTIVATE keeps the source application focused while the panel is visible.
-        var helper = new WindowInteropHelper(this);
-        var style = GetWindowLong(helper.Handle, GWL_EXSTYLE);
-        SetWindowLong(helper.Handle, GWL_EXSTYLE, style | WS_EX_NOACTIVATE);
+        if (State.Result.Length == 0) return;
+        try { System.Windows.Clipboard.SetText(State.Result); Note.Text = "已复制"; }
+        catch (System.Runtime.InteropServices.ExternalException) { Note.Text = "剪贴板正忙，请重试。"; }
     }
-
-    /// <summary>
-    /// Gives the composer real keyboard focus for IME composition: removes
-    /// WS_EX_NOACTIVATE, activates the window, and places the caret. Without this, a
-    /// no-activate window never receives the composition input context, so marked text
-    /// (IME composition) cannot start.
-    /// </summary>
-    private void ActivateForInput()
+    private void CopyImage()
     {
-        var helper = new WindowInteropHelper(this);
-        var style = GetWindowLong(helper.Handle, GWL_EXSTYLE);
-        SetWindowLong(helper.Handle, GWL_EXSTYLE, style & ~WS_EX_NOACTIVATE);
-        Activate();
-        _composer.Focus();
-        _composer.CaretIndex = _composer.Text.Length;
+        if (State.Result.Length == 0) return;
+        try { System.Windows.Clipboard.SetImage(ResultDocument.Image(State.Result, ResultTitle.Text)); Note.Text = "已复制图片"; }
+        catch (InvalidOperationException error) { Note.Text = error.Message; }
+        catch (Exception) { Note.Text = "图片复制失败，请重试或复制文字。"; }
     }
-
-    private const int GWL_EXSTYLE = -20;
-    private const int WS_EX_NOACTIVATE = 0x08000000;
-
-    [DllImport("user32.dll")]
-    private static extern int GetWindowLong(nint hWnd, int nIndex);
-
-    [DllImport("user32.dll")]
-    private static extern int SetWindowLong(nint hWnd, int nIndex, int dwNewLong);
+    private void OnExecute(object sender, RoutedEventArgs e) => SubmitCurrent();
+    private void OnStop(object sender, RoutedEventArgs e) { _model.StopRecognition(); StopResult(); }
+    private void OnCopy(object sender, RoutedEventArgs e) => CopyResult();
+    private void OnCopyImage(object sender, RoutedEventArgs e) => CopyImage();
+    private void OnSettings(object sender, RoutedEventArgs e) { Hide(); _model.ShowSettings(); }
+    private void OnHide(object sender, RoutedEventArgs e) => Hide();
+    private void OnRetryCapture(object sender, RoutedEventArgs e) => _model.StartCapture();
 }

@@ -71,11 +71,12 @@ public sealed class WindowsRegressionTests
                 Shortcut = new(0x85, ShortcutModifiers.Control | ShortcutModifiers.Alt),
                 CaptureShortcut = new(0x86, ShortcutModifiers.Control | ShortcutModifiers.Alt),
                 LayerShortcut = new(0x87, ShortcutModifiers.Control | ShortcutModifiers.Alt),
+                ImproveShortcut = new(0x84, ShortcutModifiers.Control | ShortcutModifiers.Alt),
             };
             model.ReloadSettings();
             var hotkeys = Field<GlobalHotkeySource>(model, "_hotkeys");
             var actions = Field<Dictionary<int, GlobalHotkeySource.GlobalShortcutActionMirror>>(hotkeys, "_actions");
-            Assert.Equal(4, actions.Count);
+            Assert.Equal(5, actions.Count);
             Assert.Contains(GlobalHotkeySource.GlobalShortcutActionMirror.WholeWindowTranslationLayer, actions.Values);
 
             // Settings check reports failure in the still-visible window with the isolated incomplete config.
@@ -95,15 +96,21 @@ public sealed class WindowsRegressionTests
             overlay.Show();
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             GetWindowRect(new WindowInteropHelper(overlay).Handle, out var overlayBounds);
-            Assert.Equal(118, overlayBounds.Left);
-            Assert.Equal(148, overlayBounds.Top);
-            Assert.InRange(overlayBounds.Right - overlayBounds.Left, 303, 305);
+            Assert.Equal(120, overlayBounds.Left);
+            Assert.Equal(150, overlayBounds.Top);
+            Assert.InRange(overlayBounds.Right - overlayBounds.Left, 299, 301);
             typeof(AppModel).GetField("_layerOverlay", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(model, overlay);
             Invoke(model, "ToggleLayer", false);
             Assert.False(overlay.IsVisible);
             Assert.Null(typeof(AppModel).GetField("_layerOverlay", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(model));
 
             await CopyPreservesFormatsAsync(source, second, hwnd);
+            ((PanelWindow)Field<PanelWindow>(model, "_panel")).Hide();
+            await ReplacementRequiresUnchangedSelectionAsync(source, second, hwnd);
+            var image = (System.Windows.Media.Imaging.BitmapSource)typeof(PanelWindow).Assembly.GetType("Cida.Desktop.ResultDocument")!
+                .GetMethod("Image", BindingFlags.Static | BindingFlags.Public)!.Invoke(null, new object[] { string.Join("\n\n", Enumerable.Repeat("Long result with a preserved final line.", 25)), "测试" })!;
+            Assert.True(image.PixelHeight > 1000, "Copy-image must include the entire result, beyond the panel viewport.");
+            await ReadOnlyParagraphsUseActualRangesAsync();
         }
         finally { model.Stop(); source.Close(); }
     });
@@ -113,6 +120,78 @@ public sealed class WindowsRegressionTests
         var panel = typeof(AppModel).GetField("_panel", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(model);
         return panel == null ? null : (System.Windows.Controls.TextBox)typeof(PanelWindow)
             .GetField("_composer", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(panel)!;
+    }
+    private static async Task ReadOnlyParagraphsUseActualRangesAsync()
+    {
+        var document = new System.Windows.Documents.FlowDocument { PagePadding = new Thickness(0), FontSize = 16 };
+        for (var index = 0; index < 12; index++) document.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run($"Visible paragraph {index}: careful reading keeps the meaning clear.")) { Margin = new Thickness(0, 0, 0, 12) });
+        var reader = new System.Windows.Controls.RichTextBox { IsReadOnly = true, Document = document, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var window = new Window { Title = "Cida read-only paragraph fixture", Content = reader, Width = 480, Height = 330, ShowInTaskbar = false };
+        using var worker = new AccessibilityWorker();
+        try
+        {
+            window.Show(); FocusSource(window); var hwnd = new WindowInteropHelper(window).Handle;
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            var paragraphs = (await worker.QueryAsync(new("window", (long)hwnd)))?.Paragraphs;
+            Assert.NotNull(paragraphs); Assert.NotEmpty(paragraphs); Assert.True(paragraphs.Count < 12);
+            var first = paragraphs.First();
+            var pointer = (await worker.QueryAsync(new("paragraph", (long)hwnd, (int)first.Bounds.Left + 10, (int)first.Bounds.Top + 5)))?.Paragraph;
+            Assert.NotNull(pointer); Assert.Equal(first.FullText, pointer.Text); Assert.Equal(first.StartOffset, pointer.StartOffset);
+            Assert.InRange(pointer.Bounds.Height, 1, 150);
+            using var server = new ControlledModelServer();
+            var settings = new CidaSettings { ModelService = new ModelConfiguration { Endpoint = server.Endpoint, Model = "fixture" }, ApiKey = "synthetic-fixture-key" };
+            var store = new ConfigurationStore(() => settings, _ => { }, () => settings.ApiKey, _ => { }, () => { }, () => true, () => null, _ => { }, () => false, _ => { }, () => { });
+            var model = new AppModel(store);
+            using var session = new LayerSession(model, hwnd, pointer);
+            session.Start();
+            await UntilAsync(() => Field<Dictionary<string, LayerOverlayWindow>>(session, "_overlays").Values.Any(overlay => overlay.IsVisible));
+            Assert.Equal(1, server.Requests);
+            reader.ScrollToEnd(); await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            var after = (await worker.QueryAsync(new("window", (long)hwnd)))?.Paragraphs;
+            Assert.NotNull(after); Assert.NotEmpty(after); Assert.DoesNotContain(after, p => p.Text == first.Text);
+            await UntilAsync(() => Field<Dictionary<string, LayerOverlayWindow>>(session, "_overlays").Count == 0);
+            reader.ScrollToHome(); await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            await UntilAsync(() => Field<Dictionary<string, LayerOverlayWindow>>(session, "_overlays").Values.Any(overlay => overlay.IsVisible));
+            Assert.Equal(1, server.Requests); // Restoring the visible paragraph reuses its translation.
+            ((System.Windows.Documents.Run)((System.Windows.Documents.Paragraph)document.Blocks.FirstBlock).Inlines.FirstInline).Text = "Changed source paragraph invalidates its old translation.";
+            await UntilAsync(() => Field<bool>(session, "_disposed"));
+            Assert.Empty(Field<Dictionary<string, LayerOverlayWindow>>(session, "_overlays"));
+            session.Dispose();
+            using var whole = new LayerSession(model, hwnd); whole.Start();
+            await UntilAsync(() => Field<Dictionary<string, LayerOverlayWindow>>(whole, "_overlays").Count > 1);
+            whole.ToggleOriginal(); Assert.All(Field<Dictionary<string, LayerOverlayWindow>>(whole, "_overlays").Values, overlay => Assert.False(overlay.IsVisible));
+            whole.Dispose(); model.Stop();
+            reader.IsReadOnly = false;
+            var editable = (await worker.QueryAsync(new("window", (long)hwnd)))?.Paragraphs;
+            Assert.NotNull(editable); Assert.Empty(editable);
+        }
+        finally { window.Close(); }
+    }
+    private static async Task ReplacementRequiresUnchangedSelectionAsync(Window source, System.Windows.Controls.TextBox editor, nint hwnd)
+    {
+        using var clipboard = ClipboardSnapshot.Capture();
+        Assert.NotNull(clipboard);
+        using var worker = new AccessibilityWorker();
+        editor.Text = "prefix target suffix"; editor.IsUndoEnabled = false; editor.IsUndoEnabled = true;
+        FocusSource(source); editor.Focus(); editor.Select(7, 6);
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+        var original = (await worker.QueryAsync(new("replacement", (long)hwnd)))?.Replacement;
+        Assert.NotNull(original); Assert.True(original.Editable);
+        editor.Select(0, 6);
+        Assert.False(await SelectionReplacer.ReplaceAsync(original, "better", worker, CancellationToken.None));
+        Assert.Equal("prefix target suffix", editor.Text);
+        editor.Text = "prefix target changed"; editor.Select(7, 6);
+        Assert.False(await SelectionReplacer.ReplaceAsync(original, "better", worker, CancellationToken.None));
+        editor.Text = "prefix target suffix"; editor.IsUndoEnabled = false; editor.IsUndoEnabled = true; editor.Select(7, 6);
+        original = (await worker.QueryAsync(new("replacement", (long)hwnd)))?.Replacement;
+        Assert.NotNull(original);
+        Assert.True(await SelectionReplacer.ReplaceAsync(original, "better", worker, CancellationToken.None));
+        Assert.Equal("prefix better suffix", editor.Text);
+        Assert.True(editor.CanUndo); editor.Undo(); Assert.Equal("prefix target suffix", editor.Text);
+        editor.IsReadOnly = true; editor.Select(7, 6);
+        var readOnly = (await worker.QueryAsync(new("replacement", (long)hwnd)))?.Replacement;
+        Assert.True(readOnly == null || !readOnly.Editable);
+        editor.IsReadOnly = false;
     }
     private static T Field<T>(object target, string name) => (T)target.GetType()
         .GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(target)!;
@@ -158,6 +237,9 @@ public sealed class WindowsRegressionTests
         }
         finally
         {
+            // OLE may release its owner HWND after flushing. The production guard
+            // then requires the source to be foreground; restore that test precondition.
+            FocusSource(source);
             var restored = ClipboardSnapshot.Restore(original!, hwnd, ClipboardSnapshot.SequenceNumber());
             Assert.True(restored, "Original clipboard restore failed; untransferred formats: " +
                 string.Join(",", original!.Formats.Where(entry => entry.Handle != 0).Select(entry => entry.Format)));

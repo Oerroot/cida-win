@@ -3,10 +3,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
-        <SolidColorBrush x:Key="PanelBackground" Color="#F8F7F4" />
-        <SolidColorBrush x:Key="PanelBorder" Color="#E3E0D8" />
-        <SolidColorBrush x:Key="Ink" Color="#1F1D1A" />
-        <SolidColorBrush x:Key="InkSecondary" Color="#6E6A62" />
-        <SolidColorBrush x:Key="Accent" Color="#B4552D" />
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Resources/Controls.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -20,10 +20,13 @@
     <RootNamespace>Cida.Desktop</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Nullable>enable</Nullable>
+    <Version>0.2.0-rc.1</Version>
+    <ApplicationIcon>Assets\Brand\Cida.ico</ApplicationIcon>
   </PropertyGroup>
 
 
   <ItemGroup>
-    <Content Include="SparsePackage\AppxManifest.xml;SparsePackage\Assets\**\*;SparsePackage\build\CidaWinIdentity.msix;SparsePackage\build\CidaIdentity.cer" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Resource Include="Assets\Fonts\*.ttf;Assets\Brand\Cida.png;Assets\Brand\Cida.ico" />
+    <Content Include="Assets\Fonts\OFL-*.txt;Assets\provenance.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
