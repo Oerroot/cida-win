@@ -21,9 +21,20 @@ if (-not $CrtDirectory) {
     if (-not (Test-Path $vswhere)) { throw 'Visual Studio VC redistributables not found; supply -CrtDirectory.' }
     $install = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
     $redist = Join-Path $install 'VC\Redist\MSVC'
-    $latest = Get-ChildItem $redist -Directory | Where-Object Name -match '^\d+\.\d+\.\d+$' | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
-    if (-not $latest) { throw 'VC redistributable version missing.' }
-    $CrtDirectory = Join-Path $latest.FullName 'x64\Microsoft.VC143.CRT'
+    # VS 2022 and VS 2026 name the CRT directories differently. Select a
+    # compatible x64 redist by its required files, then validate each signature.
+    $versions = Get-ChildItem $redist -Directory | Where-Object Name -match '^\d+\.\d+\.\d+$' | Sort-Object { [version]$_.Name } -Descending
+    foreach ($runtimeVersion in $versions) {
+        $runtimeRoot = Join-Path $runtimeVersion.FullName 'x64'
+        if (-not (Test-Path $runtimeRoot)) { continue }
+        $runtime = Get-ChildItem $runtimeRoot -Directory -Filter 'Microsoft.VC*.CRT' | Where-Object {
+            (Test-Path (Join-Path $_.FullName 'msvcp140.dll')) -and
+            (Test-Path (Join-Path $_.FullName 'vcruntime140.dll')) -and
+            (Test-Path (Join-Path $_.FullName 'vcruntime140_1.dll'))
+        } | Select-Object -First 1
+        if ($runtime) { $CrtDirectory = $runtime.FullName; break }
+    }
+    if (-not $CrtDirectory) { throw 'Compatible x64 VC redistributables missing.' }
 }
 $crtFiles = @(Get-ChildItem -LiteralPath $CrtDirectory -File -Filter '*.dll')
 foreach ($required in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {

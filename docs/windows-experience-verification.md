@@ -1,4 +1,4 @@
-# Windows 体验重构验证 · v0.2.0-rc.1
+# Windows 体验重构验证 · v0.2.0-rc.2
 
 2026-10-08；Windows 11 x64，系统 build 26300，.NET SDK 10.0.401。开发基线 `bb99d257aef360d8ec2603bb4f22d02da6b16047`，上游设计参照 `473013c93e052e08603ffd2faccda0d6dafbb5be`。用户已批准实施，并明确接受未签名候选安装包、便携包。
 
@@ -29,7 +29,7 @@ $env:CIDA_DESKTOP_TESTS = '1'
 dotnet test tests/Cida.Windows.Tests -c Release
 Remove-Item Env:\CIDA_DESKTOP_TESTS
 dotnet run --project tests/Cida.VisualChecks -- --render-suite
-pwsh -File scripts/package.ps1 -Version 0.2.0-rc.1
+pwsh -File scripts/package.ps1 -Version 0.2.0-rc.2
 ```
 
 Release 构建 0 错误、0 警告；Core **96/96**；本机交互桌面 Windows **5/5**。这 5 项包括 ABI、存储、OCR、布局及包含多段断言的桌面流程。CI 没有交互桌面授权时跳过桌面流程，其余 4 项仍运行；不能把 CI 的跳过写成通过。
@@ -42,7 +42,7 @@ Computer Use 操作了真实产品视图：中英文字输入、Shift+Enter 只�
 
 ## 候选包检查
 
-打包使用 vpk **1.2.161**，应用版本 **0.2.0-rc.1**，通道 **win-x64-preview**。VC runtime 来自本机 Visual Studio Build Tools `VC/Redist/MSVC`，核验 Microsoft Authenticode 签名后应用本地部署；不从 System32 取 DLL。记录文件名、版本、SHA256 与签名者到 `vc-runtime-provenance.json`。
+打包使用 vpk **1.2.161**，应用版本 **0.2.0-rc.2**，通道 **win-x64-preview**。VC runtime 来自本机 Visual Studio Build Tools `VC/Redist/MSVC`，核验 Microsoft Authenticode 签名后应用本地部署；不从 System32 取 DLL。记录文件名、版本、SHA256 与签名者到 `vc-runtime-provenance.json`。
 
 包中含 `CANDIDATE.txt`、LICENSE/NOTICE、字体 OFL、OCR 许可/模型/原生 DLL，以及 GUI/CLI 的自包含运行时。候选程序不含 MSIX 绑定，启动不安装证书或自动注册身份包。CLI `probe-identity` 已改为只读检查。
 
@@ -60,3 +60,7 @@ Computer Use 操作了真实产品视图：中英文字输入、Shift+Enter 只�
 - 受信任 Windows 发布者签名。用户已确认当前交付候选包；该条件仍是正式签名发行版的门槛。
 
 上述属于目标环境验收边界，不以受控窗口、模拟响应、静态代码或缩放图片替代。
+
+## 发布流水线修复
+
+rc.1 的 GitHub runner 使用 Visual Studio 18，其 x64 CRT 目录不再匹配写死的 VC143 名称。该流水线在打包前停止，未发布附件。脚本改为按必需 DLL 寻找 x64 redist 并核验 Microsoft 签名；候选版本推进到 rc.2，旧 tag 保留。
