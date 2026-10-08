@@ -9,7 +9,7 @@
                     <TextBlock Text="模型服务" FontSize="18" FontWeight="SemiBold"/>
                     <TextBlock x:Name="ModelSummary" Foreground="{DynamicResource InkSecondary}" FontSize="13" Margin="0,8,0,16" TextWrapping="Wrap"/>
                     <TextBlock Text="使用你自己的模型服务。所有处理请求直接发送到下面的端点。" Foreground="{DynamicResource InkSecondary}" FontSize="13" TextWrapping="Wrap"/>
-                    <Button Content="复制 AI 配置说明" Click="OnCopyConfiguration" HorizontalAlignment="Left" Foreground="{DynamicResource Accent}" Margin="-12,8,0,14"/>
+                    <Button Content="复制 AI 配置说明" Click="OnCopyConfiguration" HorizontalAlignment="Left" Foreground="{DynamicResource Accent}" Margin="0,10,0,16"/>
                     <Expander Header="手工配置" IsExpanded="True">
                         <StackPanel Margin="0,14,0,0">
                             <TextBlock Text="完整端点地址" Margin="0,0,0,6"/><TextBox x:Name="Endpoint" AutomationProperties.Name="完整端点地址"/>
@@ -18,7 +18,7 @@
                                 <StackPanel Grid.Column="2"><TextBlock Text="模型名称" Margin="0,0,0,6"/><TextBox x:Name="ModelName"/></StackPanel>
                             </Grid>
                             <TextBlock Text="API Key" Margin="0,16,0,6"/>
-                            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="166"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
                                 <ComboBox x:Name="KeyMode" SelectionChanged="OnKeyMode"><ComboBoxItem Content="保留已存密钥"/><ComboBoxItem Content="更换密钥"/><ComboBoxItem Content="清除密钥"/></ComboBox>
                                 <PasswordBox x:Name="ApiKey" Grid.Column="2" IsEnabled="False" AutomationProperties.Name="新 API Key"/>
                             </Grid>
@@ -49,7 +49,7 @@
                     <TextBlock Text="名称" Margin="0,0,0,6"/><TextBox x:Name="ActionName" TextChanged="OnActionEdited"/>
                     <CheckBox x:Name="ActionEnabled" Content="在面板中显示" Margin="0,12,0,16" Checked="OnActionToggled" Unchecked="OnActionToggled"/>
                     <TextBlock Text="提示词" Margin="0,0,0,6"/><TextBox x:Name="ActionPrompt" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="100" MaxHeight="170" VerticalScrollBarVisibility="Auto" TextChanged="OnActionEdited"/>
-                    <Button Content="恢复内置提示词" x:Name="ResetPrompt" Click="OnResetPrompt" HorizontalAlignment="Left" Margin="-12,8,0,8"/>
+                    <Button Content="恢复内置提示词" x:Name="ResetPrompt" Click="OnResetPrompt" HorizontalAlignment="Left" Margin="0,10,0,12"/>
                     <StackPanel Orientation="Horizontal"><Button x:Name="PreviewButton" Content="用当前草稿模型预览" Click="OnPreview" BorderThickness="1"/><Button x:Name="CancelPreview" Content="停止预览" Click="OnCancelPreview" Visibility="Collapsed"/></StackPanel>
                     <TextBlock Text="固定样本：This sentence need to be more clear and natural." FontSize="12" Foreground="{DynamicResource InkSecondary}" Margin="0,10,0,8" TextWrapping="Wrap"/>
                     <TextBox x:Name="PreviewResult" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="200" VerticalScrollBarVisibility="Auto"/>
@@ -60,7 +60,7 @@
                     <TextBlock Text="直接按下组合键录入；Backspace 清除。" FontSize="13" Foreground="{DynamicResource InkSecondary}" Margin="0,0,0,20" TextWrapping="Wrap"/>
                     <Grid x:Name="ShortcutRows"/>
                     <TextBlock x:Name="ShortcutStatus" FontSize="13" Foreground="{DynamicResource Error}" TextWrapping="Wrap" Margin="0,14,0,0"/>
-                    <Button Content="恢复默认快捷键" Click="OnResetShortcuts" HorizontalAlignment="Left" Margin="-12,14,0,0"/>
+                    <Button Content="恢复默认快捷键" Click="OnResetShortcuts" HorizontalAlignment="Left" Margin="0,14,0,0"/>
                     <TextBlock Text="面板内" FontSize="18" FontWeight="SemiBold" Margin="0,30,0,14"/>
                     <TextBlock Text="Enter 执行　Shift+Enter 换行&#10;Tab 切换动作　Esc 隐藏&#10;Ctrl+. 停止　Ctrl+L 修改常用外语&#10;Ctrl+C 复制　Ctrl+Shift+C 复制图片&#10;Ctrl+, 打开设置" FontSize="14" TextBlock.LineHeight="30" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap"/>
                 </StackPanel></ScrollViewer>

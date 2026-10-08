@@ -43,5 +43,20 @@
         "file": "eng.traineddata"
       }
     ]
+  },
+  "brand_small_frames": {
+    "sizes": [
+      16,
+      20,
+      24,
+      28,
+      32,
+      40,
+      48,
+      64,
+      128,
+      256
+    ],
+    "method": "Pixel-aligned optical simplification of the character and caret at 16-40px; original detailed glyph at 48px and above."
   }
 }

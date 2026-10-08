@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Point = System.Windows.Point;
 
 namespace Cida.VisualChecks;
 
@@ -50,6 +51,8 @@ public static class Program
         Button("主面板", () => { panel.Show(); panel.FocusInput(); });
         Button("设置", () => { panel.Hide(); model.ShowSettings(); });
         Button("浅色", () => ThemeService.Apply(false)); Button("深色", () => ThemeService.Apply(true));
+        using var inspectionMenu = TrayMenu.Create(model);
+        Button("托盘菜单", () => { var menu = inspectionMenu; var owner = application.Windows.Cast<Window>().Single(w => w.Title == "Cida · 界面验收控制器"); var anchor = owner.PointToScreen(new Point(12, 180)); menu.Show(new System.Drawing.Point((int)anchor.X, (int)anchor.Y)); });
         Button("完成示例", () =>
         {
             panel.SetSourceText("Good software should make the next step feel obvious.\n\nKeep the meaning. Remove the noise.");
@@ -81,6 +84,8 @@ public static class Program
     private static async Task RenderSuiteAsync(System.Windows.Application application, AppModel model, PanelWindow panel, string profile)
     {
         var directory = Path.Combine(profile, "render-suite"); Directory.CreateDirectory(directory);
+        using (var icon = BrandAssets.LoadTrayIcon())
+            File.WriteAllText(Path.Combine(directory, "tray-icon-metrics.json"), JsonSerializer.Serialize(new { width=icon.Width, height=icon.Height }));
         void Save(Window window, string name, double scale = 1)
         {
             window.UpdateLayout();
@@ -108,9 +113,31 @@ public static class Program
             for (var index = 0; index < 4; index++)
             {
                 pages.SelectedIndex = index; await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                if (index == 0)
+                {
+                    var format = (System.Windows.Controls.ComboBox)settings.FindName("Format");
+                    var modelName = (System.Windows.Controls.TextBox)settings.FindName("ModelName");
+                    var keyMode = (System.Windows.Controls.ComboBox)settings.FindName("KeyMode");
+                    var key = (System.Windows.Controls.PasswordBox)settings.FindName("ApiKey");
+                    if (Math.Abs(format.ActualHeight - modelName.ActualHeight) > .1 || Math.Abs(keyMode.ActualHeight - key.ActualHeight) > .1 ||
+                        Math.Abs(format.TranslatePoint(new Point(), settings).Y - modelName.TranslatePoint(new Point(), settings).Y) > .1 ||
+                        Math.Abs(keyMode.TranslatePoint(new Point(), settings).Y - key.TranslatePoint(new Point(), settings).Y) > .1)
+                        throw new InvalidOperationException("Model form controls are not aligned.");
+                    File.WriteAllText(Path.Combine(directory, theme + "-form-metrics.json"), JsonSerializer.Serialize(new {
+                        protocolHeight=format.ActualHeight, modelHeight=modelName.ActualHeight, keyModeHeight=keyMode.ActualHeight, keyHeight=key.ActualHeight,
+                        protocolY=format.TranslatePoint(new Point(),settings).Y, modelY=modelName.TranslatePoint(new Point(),settings).Y,
+                        keyModeY=keyMode.TranslatePoint(new Point(),settings).Y, keyY=key.TranslatePoint(new Point(),settings).Y }));
+                }
                 Save(settings, theme + "-settings-" + index);
             }
             settings.Close();
+            using var menu = TrayMenu.Create(model);
+            menu.Show(new System.Drawing.Point(60, 80));
+            await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            using var menuImage = new System.Drawing.Bitmap(menu.Width, menu.Height);
+            menu.DrawToBitmap(menuImage, new System.Drawing.Rectangle(0,0,menu.Width,menu.Height));
+            menuImage.Save(Path.Combine(directory, theme + "-tray-menu.png"));
+            menu.Close();
         }
         panel.Close();
         File.WriteAllText(Path.Combine(directory, "README.txt"), "Controlled renders of real product views with local synthetic data. Raster scales 1/1.25/1.5/2 are not OS DPI or multi-monitor acceptance. No external model request was sent.");

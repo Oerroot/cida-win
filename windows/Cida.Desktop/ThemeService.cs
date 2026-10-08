@@ -7,6 +7,7 @@ namespace Cida.Desktop;
 
 public static class ThemeService
 {
+    public static event Action? Changed;
     private static bool _listening;
     private static bool _dark;
     public static void ApplyWindowFrame(Window window)
@@ -21,13 +22,17 @@ public static class ThemeService
     {
         Apply(); if (_listening) return;
         _listening = true; SystemEvents.UserPreferenceChanged += OnChanged;
+        SystemEvents.DisplaySettingsChanged += OnDisplayChanged;
     }
     public static void Stop()
     {
         if (_listening) SystemEvents.UserPreferenceChanged -= OnChanged;
+        if (_listening) SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
         _listening = false;
     }
     private static void OnChanged(object sender, UserPreferenceChangedEventArgs e) =>
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => Apply());
+    private static void OnDisplayChanged(object? sender, EventArgs e) =>
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => Apply());
     public static void Apply(bool? dark = null)
     {
@@ -42,10 +47,10 @@ public static class ThemeService
         }
         catch { dark ??= false; }
         _dark = dark == true;
-        string[] names = ["PanelBackground", "Paper", "PanelBorder", "Ink", "InkSecondary", "Accent", "AccentSoft", "Error", "AccentInk"];
+        string[] names = ["PanelBackground", "Paper", "PanelBorder", "Ink", "InkSecondary", "Accent", "AccentSoft", "Error", "AccentInk", "ControlBackground", "ControlBorder", "ControlHover"];
         string[] colors = dark == true
-            ? ["#20251F", "#272D24", "#424A3D", "#ECEEE7", "#B2BAAB", "#94C6A2", "#354334", "#F1A79B", "#172019"]
-            : ["#FFFFFF", "#F5F3ED", "#DADDD5", "#242922", "#646C60", "#346847", "#E9EFE7", "#A43B32", "#FFFFFF"];
+            ? ["#20251F", "#272D24", "#424A3D", "#ECEEE7", "#B2BAAB", "#94C6A2", "#354334", "#F1A79B", "#172019", "#2D342A", "#66715F", "#3B4937"]
+            : ["#FFFFFF", "#F5F3ED", "#DADDD5", "#242922", "#646C60", "#346847", "#E9EFE7", "#A43B32", "#FFFFFF", "#F8F9F6", "#B8C1B3", "#E9EFE7"];
         for (var i = 0; i < names.Length; i++)
         {
             var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colors[i]));
@@ -62,7 +67,11 @@ public static class ThemeService
             app.Resources["AccentSoft"] = SystemColors.ControlBrush;
             app.Resources["PanelBorder"] = SystemColors.WindowTextBrush;
             app.Resources["Error"] = SystemColors.WindowTextBrush;
+            app.Resources["ControlBackground"] = SystemColors.ControlBrush;
+            app.Resources["ControlBorder"] = SystemColors.WindowTextBrush;
+            app.Resources["ControlHover"] = SystemColors.ControlBrush;
         }
         foreach (Window window in app.Windows) ApplyWindowFrame(window);
+        Changed?.Invoke();
     }
 }

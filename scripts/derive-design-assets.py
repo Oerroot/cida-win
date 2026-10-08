@@ -22,10 +22,10 @@ brand = root / "windows/Cida.Desktop/Assets/Brand"
 source = root / "artifacts/experience/sourcefonts"
 source.mkdir(parents=True, exist_ok=True)
 records = []
-for filename, axes, family in [
+for filename, axes, family in ([] if "--brand-only" in sys.argv else [
     ("SourceSerif4[opsz,wght].ttf", {"wght": 400, "opsz": 20}, "Cida Serif"),
     ("NotoSerifSC[wght].ttf", {"wght": 400}, "Cida Chinese Serif"),
-]:
+]):
     original = fonts / filename
     if original.exists():
         original.replace(source / filename)
@@ -80,6 +80,41 @@ caret = ET.parse(brand / "caret.svg").getroot()[0].attrib
 x, y, width, height = [float(caret[k]) * 2 for k in ("x", "y", "width", "height")]
 draw.rectangle((x, y, x+width, y+height), fill="#346847")
 image.resize((256, 256), Image.Resampling.LANCZOS).save(brand / "Cida.png")
-image.resize((256, 256), Image.Resampling.LANCZOS).save(brand / "Cida.ico", sizes=[(16,16),(20,20),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])
-(brand.parent / "provenance.json").write_text(json.dumps({"upstream": "Xuanwo/cida", "commit": "473013c93e052e08603ffd2faccda0d6dafbb5be", "font_derivatives": records, "brand_source": ["glyph.svg", "caret.svg"], "ocr_data": {"repository": "tesseract-ocr/tessdata_fast", "commit": "87416418657359cb625c412a48b6e1d6d41c29bd"}}, ensure_ascii=False, indent=2), encoding="utf-8")
+# The detailed serif glyph needs optical simplification below 48px. Draw each
+# small frame on its own pixel grid; never downsample a selected 32px tray icon.
+def small_mark(size):
+    bitmap = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    pen = ImageDraw.Draw(bitmap)
+    pen.rounded_rectangle((0, 0, size-1, size-1), radius=round(size/8), fill="#F5F3ED")
+    scale = size/16
+    def line(points, color="#242922"):
+        pen.line([(round(x*scale), round(y*scale)) for x,y in points], fill=color, width=max(1,round(scale)))
+    # 舌 + 辛 keep the character and caret recognizable with complete pixel stems.
+    for points in [[(2,3),(6,2)],[(4,3),(4,7)],[(1,5),(7,5)],[(2,8),(6,8),(6,13),(2,13),(2,8)],
+                   [(10,2),(11,2)],[(8,4),(13,4)],[(9,5),(10,7)],[(12,5),(11,7)],
+                   [(8,8),(13,8)],[(8,11),(13,11)],[(10,8),(10,14)]]:
+        line(points)
+    line([(15,4),(15,13)], "#346847")
+    return bitmap
+sizes = [16,20,24,28,32,40,48,64,128,256]
+frames = [small_mark(size) if size < 48 else image.resize((size,size), Image.Resampling.LANCZOS) for size in sizes]
+frames[0].save(brand / "Cida16.png")
+frames[sizes.index(24)].save(brand / "Cida24.png")
+# Explicit entries ensure Pillow doesn't regenerate the small frames from 256px.
+import struct, io
+payloads = []
+for frame in frames:
+    stream = io.BytesIO(); frame.save(stream, format="PNG"); payloads.append(stream.getvalue())
+offset = 6 + 16*len(frames)
+entries = []
+for size, payload in zip(sizes, payloads):
+    entries.append(struct.pack("<BBBBHHII", size if size<256 else 0, size if size<256 else 0, 0,0,1,32,len(payload),offset))
+    offset += len(payload)
+(brand / "Cida.ico").write_bytes(struct.pack("<HHH",0,1,len(frames))+b"".join(entries)+b"".join(payloads))
+manifest = brand.parent / "provenance.json"
+provenance = json.loads(manifest.read_text(encoding="utf-8")) if manifest.exists() else {"upstream":"Xuanwo/cida", "commit":"473013c93e052e08603ffd2faccda0d6dafbb5be"}
+if records: provenance["font_derivatives"] = records
+provenance["brand_source"] = ["glyph.svg", "caret.svg"]
+provenance["brand_small_frames"] = {"sizes":sizes, "method":"Pixel-aligned optical simplification of the character and caret at 16-40px; original detailed glyph at 48px and above."}
+manifest.write_text(json.dumps(provenance, ensure_ascii=False, indent=2), encoding="utf-8")
 print("Static fonts, Windows ICO and provenance written.")

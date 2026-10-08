@@ -69,9 +69,7 @@ public partial class PanelWindow : Window
         ActionButtons.Children.Clear();
         foreach (var action in actions)
         {
-            var button = new Button { Content = action.Name, Margin = new Thickness(0, 0, 4, 0), ToolTip = action.Name + " · Tab 切换" };
-            button.SetResourceReference(Control.ForegroundProperty, action.Id == State.ActionId ? "Accent" : "InkSecondary");
-            button.SetResourceReference(Control.BackgroundProperty, action.Id == State.ActionId ? "AccentSoft" : "PanelBackground");
+            var button = new Button { Content = action.Name, Style = (Style)FindResource("ActionButton"), Tag = action.Id == State.ActionId ? "selected" : "idle", ToolTip = action.Name + " · Tab 切换" };
             button.Click += (_, _) => { State.ActionId = action.Id; RefreshActions(); RefreshStatus(); };
             ActionButtons.Children.Add(button);
         }

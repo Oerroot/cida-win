@@ -4,10 +4,10 @@
 
 ## 下载
 
-[v0.2.0-rc.2 候选版](https://github.com/Oerroot/cida-win/releases/tag/v0.2.0-rc.2)：
+[v0.2.0-rc.3 候选版](https://github.com/Oerroot/cida-win/releases/tag/v0.2.0-rc.3)：
 
-- [Windows x64 安装包](https://github.com/Oerroot/cida-win/releases/download/v0.2.0-rc.2/Cida-win-x64-preview-Setup.exe)
-- [Windows x64 便携包](https://github.com/Oerroot/cida-win/releases/download/v0.2.0-rc.2/Cida-win-x64-preview-Portable.zip)
+- [Windows x64 安装包](https://github.com/Oerroot/cida-win/releases/download/v0.2.0-rc.3/Cida-win-x64-preview-Setup.exe)
+- [Windows x64 便携包](https://github.com/Oerroot/cida-win/releases/download/v0.2.0-rc.3/Cida-win-x64-preview-Portable.zip)
 
 这是**未签名候选版**。安装包与程序尚无受信任的发布者签名；Windows 可能显示未知发布者提示。请按发布页的 SHA256SUMS 校验来源。无需安装开发证书、身份包、.NET 或额外 OCR 语言包。完整解压便携包后运行根目录的 `辞达 Cida（候选版）.exe`；命令行在 `current/Cida.Cli.exe`。
 
@@ -75,14 +75,14 @@ $env:CIDA_DESKTOP_TESTS = '1'
 dotnet test tests/Cida.Windows.Tests -c Release
 Remove-Item Env:\CIDA_DESKTOP_TESTS
 dotnet run --project tests/Cida.VisualChecks -- --render-suite
-pwsh -File scripts/package.ps1 -Version 0.2.0-rc.2
+pwsh -File scripts/package.ps1 -Version 0.2.0-rc.3
 ```
 
 交互桌面测试短暂显示自有测试窗口并保存、恢复剪贴板，运行时应关闭其他辞达进程。视觉验收工具仅使用本地模拟响应和独立配置。`CIDA_PROFILE` 可将 GUI / CLI 配置与单实例通信隔离到指定目录。
 
 打包依赖 vpk 1.2.161 与具有合法再分发权的 Visual Studio VC runtime 文件。脚本核验 Microsoft 签名后应用本地部署运行库，检查候选包不包含私钥、证书或 MSIX，并拒绝覆盖已有版本输出。
 
-当前证据与剩余边界见 [Windows 体验验证记录](docs/windows-experience-verification.md)。代码实现、受控渲染、真实窗口交互、干净机器安装与正式签名分别记录。完整中文 IME 候选提交、外部应用矩阵、混合 DPI 多屏、干净系统安装/升级/卸载仍不作为本候选版已通过的项目。
+当前界面修复证据见 [rc.3 界面细节验证](docs/windows-ui-polish-verification.md)，完整体验见 [rc.2 验证记录](docs/windows-experience-verification.md)。代码实现、受控渲染、真实窗口交互、干净机器安装与正式签名分别记录。完整中文 IME 候选提交、外部应用矩阵、混合 DPI 多屏、干净系统安装/升级/卸载仍不作为本候选版已通过的项目。
 
 发布流程：添加 `docs/releases/vX.Y.Z[-rc.N].md`，提交后创建新 tag。GitHub Actions 构建、运行非交互测试、生成并上传预发布包；不会改写已有 tag 或替换既有发布附件。
 

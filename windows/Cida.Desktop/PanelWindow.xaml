@@ -5,8 +5,8 @@
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="1.0*"/><RowDefinition Height="Auto"/><RowDefinition Height="1.6*"/></Grid.RowDefinitions>
             <Grid Margin="28,18,20,0" x:Name="TitleBar">
                 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBlock Text="辞达" FontSize="13" Foreground="{DynamicResource InkSecondary}" VerticalAlignment="Center"/>
-                <StackPanel Grid.Column="1" Orientation="Horizontal"><Button Content="设置" Click="OnSettings" ToolTip="设置 · Ctrl+,"/><Button Content="关闭" Click="OnHide" ToolTip="隐藏面板 · Esc"/></StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image Source="/Cida;component/Assets/Brand/Cida24.png" Width="24" Height="24" Margin="0,0,9,0" RenderOptions.BitmapScalingMode="NearestNeighbor"/><TextBlock Text="辞达" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/></StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal"><Button x:Name="SettingsButton" Click="OnSettings" ToolTip="设置 · Ctrl+," AutomationProperties.Name="设置"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE713;" Margin="0,0,7,0" VerticalAlignment="Center"/><TextBlock Text="设置"/></StackPanel></Button><Button x:Name="HideButton" Click="OnHide" ToolTip="隐藏面板 · Esc" AutomationProperties.Name="关闭" Margin="0"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE8BB;" Margin="0,0,7,0" VerticalAlignment="Center"/><TextBlock Text="关闭"/></StackPanel></Button></StackPanel>
             </Grid>
             <Grid Grid.Row="1" Margin="28,16,28,20">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
@@ -19,7 +19,7 @@
             <Border Grid.Row="2" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="0,1,0,1" Padding="20,10">
                 <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="ActionButtons" Orientation="Horizontal"/></ScrollViewer>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0"><Button x:Name="StopButton" Content="停止" Click="OnStop" Visibility="Collapsed" ToolTip="停止 · Ctrl+."/><Button x:Name="ExecuteButton" Content="执行 ↵" Click="OnExecute" Foreground="{DynamicResource Accent}"/></StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0"><Button x:Name="StopButton" Content="停止" Click="OnStop" Visibility="Collapsed" ToolTip="停止 · Ctrl+."/><Button x:Name="ExecuteButton" Content="执行 ↵" Click="OnExecute" Style="{StaticResource PrimaryButton}" Padding="16,6" Margin="0"/></StackPanel>
                 </Grid>
             </Border>
             <Border Grid.Row="3" Background="{DynamicResource Paper}" CornerRadius="0,0,14,14">
@@ -27,7 +27,7 @@
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock x:Name="ResultTitle" Text="译文" FontSize="12" Foreground="{DynamicResource InkSecondary}"/><TextBlock x:Name="PhaseLabel" Margin="12,0,0,0" FontSize="12" Foreground="{DynamicResource InkSecondary}"/></StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal"><Button x:Name="CopyButton" Content="复制" Click="OnCopy" ToolTip="复制 · Ctrl+C" IsEnabled="False"/><Button x:Name="ImageButton" Content="复制图片" Click="OnCopyImage" ToolTip="复制图片 · Ctrl+Shift+C" IsEnabled="False"/></StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal"><Button x:Name="CopyButton" Content="复制" Click="OnCopy" ToolTip="复制 · Ctrl+C" IsEnabled="False"/><Button x:Name="ImageButton" Content="复制图片" Click="OnCopyImage" ToolTip="复制图片 · Ctrl+Shift+C" IsEnabled="False" Margin="0"/></StackPanel>
                     </Grid>
                     <Grid Grid.Row="1">
                         <RichTextBox x:Name="ResultView" IsReadOnly="True" IsReadOnlyCaretVisible="False" BorderThickness="0" Padding="0" Background="Transparent" Foreground="{DynamicResource Ink}" FontFamily="{DynamicResource ReadingFont}" FontSize="18" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="结果">
