@@ -250,7 +250,14 @@ internal static class ClipboardSnapshot
             if (SetClipboardData(13, handle) == 0) return false;
             handle = 0; sequence = SequenceNumber(); return true;
         }
-        finally { if (handle != 0) GlobalFree(handle); CloseClipboard(); }
+        finally
+        {
+            if (handle != 0) GlobalFree(handle);
+            CloseClipboard();
+            // Closing publishes the data and Windows can synthesize text formats,
+            // advancing the sequence beyond the value sampled under the lock.
+            if (sequence != 0) sequence = SequenceNumber();
+        }
     }
     public static bool RestoreOwned(Snapshot snapshot, uint expectedSequence)
     {

@@ -34,6 +34,7 @@ public sealed class AppModel
     private CancellationTokenSource? _layerCancellation;
     private LayerSession? _layerSession;
     private System.Windows.Forms.NotifyIcon? _tray;
+    private System.Windows.Forms.ContextMenuStrip? _trayMenu;
     private CidaSettings _settings;
     private int _resultSerial;
     private CancellationTokenSource? _replaceCancellation;
@@ -55,6 +56,7 @@ public sealed class AppModel
         ThemeService.Start();
         DevelopmentTrace.Stage("theme ready");
         InstallTray();
+        ThemeService.Changed += RefreshTrayIcon;
         DevelopmentTrace.Stage("tray ready");
         ApplyShortcuts();
         ListenForConfigurationChanges();
@@ -72,6 +74,7 @@ public sealed class AppModel
         _replaceCancellation?.Cancel();
         _recognitionCancellation?.Cancel();
         ThemeService.Stop();
+        ThemeService.Changed -= RefreshTrayIcon;
         _layerCancellation?.Cancel();
         _layerOverlay?.Close();
         _layerSession?.Dispose();
@@ -82,8 +85,10 @@ public sealed class AppModel
         if (_tray != null)
         {
             _tray.Visible = false;
+            _tray.Icon?.Dispose();
             _tray.Dispose();
         }
+        _trayMenu?.Dispose();
     }
 
     private void WarmUpOcr()
@@ -472,19 +477,13 @@ public sealed class AppModel
 
     private void InstallTray()
     {
-        var menu = new System.Windows.Forms.ContextMenuStrip();
-        menu.Items.Add("显示面板", null, (_, _) => OpenPanel());
-        menu.Items.Add("截图翻译", null, (_, _) => StartCapture());
-        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-        menu.Items.Add("设置…", null, (_, _) => ShowSettings());
-        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-        menu.Items.Add("退出辞达", null, (_, _) => Exit());
+        _trayMenu = TrayMenu.Create(this);
 
         _tray = new System.Windows.Forms.NotifyIcon
         {
             Text = "辞达：翻译与润色",
-            Icon = TrayIcon(),
-            ContextMenuStrip = menu,
+            Icon = BrandAssets.LoadTrayIcon(),
+            ContextMenuStrip = _trayMenu,
             Visible = true,
         };
         _tray.DoubleClick += (_, _) => OpenPanel();
@@ -495,10 +494,10 @@ public sealed class AppModel
         if (_tray != null) _tray.Text = text.Length > 63 ? text[..63] : text;
     }
 
-    private static System.Drawing.Icon TrayIcon()
+    private void RefreshTrayIcon()
     {
-        using var stream = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Cida;component/Assets/Brand/Cida.ico")).Stream;
-        return new System.Drawing.Icon(stream, 32, 32);
+        if (_tray == null) return;
+        var old = _tray.Icon; _tray.Icon = BrandAssets.LoadTrayIcon(); old?.Dispose();
     }
 
     // MARK: configuration changes (CLI ↔ GUI)

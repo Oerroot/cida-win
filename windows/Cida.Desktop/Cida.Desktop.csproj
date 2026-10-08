@@ -20,13 +20,13 @@
     <RootNamespace>Cida.Desktop</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Nullable>enable</Nullable>
-    <Version>0.2.0-rc.2</Version>
+    <Version>0.2.0-rc.3</Version>
     <ApplicationIcon>Assets\Brand\Cida.ico</ApplicationIcon>
   </PropertyGroup>
 
 
   <ItemGroup>
-    <Resource Include="Assets\Fonts\*.ttf;Assets\Brand\Cida.png;Assets\Brand\Cida.ico" />
+    <Resource Include="Assets\Fonts\*.ttf;Assets\Brand\Cida.png;Assets\Brand\Cida16.png;Assets\Brand\Cida24.png;Assets\Brand\Cida.ico" />
     <Content Include="Assets\Fonts\OFL-*.txt;Assets\provenance.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

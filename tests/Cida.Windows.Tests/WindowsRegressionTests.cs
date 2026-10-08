@@ -25,6 +25,10 @@ public sealed class WindowsRegressionTests
     [DesktopFact]
     public Task FocusedSelectionAndPanelReopeningUseTheSourceWindow() => OnStaAsync(async () =>
     {
+        var inspectionBefore = Environment.GetEnvironmentVariable("CIDA_UI_INSPECTION");
+        Environment.SetEnvironmentVariable("CIDA_UI_INSPECTION", "1"); // A shared desktop must not auto-hide the fixture during observation.
+        // This secondary STA fixture tests selection/paste/UIA, not the user's
+        // live IME composition. Keep shared TSF transitory input out of it.
         var application = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         application.Resources["PanelBackground"] = System.Windows.Media.Brushes.WhiteSmoke;
         application.Resources["PanelBorder"] = System.Windows.Media.Brushes.Gray;
@@ -37,6 +41,8 @@ public sealed class WindowsRegressionTests
         var model = new AppModel(store);
         var first = new System.Windows.Controls.TextBox { Text = "unselected first control" };
         var second = new System.Windows.Controls.TextBox { Text = "selected second control" };
+        System.Windows.Input.InputMethod.SetIsInputMethodEnabled(first, false);
+        System.Windows.Input.InputMethod.SetIsInputMethodEnabled(second, false);
         var content = new StackPanel();
         content.Children.Add(first);
         content.Children.Add(second);
@@ -54,6 +60,7 @@ public sealed class WindowsRegressionTests
             var selection = await Task.Run(() => new SelectionReader().ReadFromAutomation(hwnd));
             Assert.Equal(second.Text, selection.Text);
             Invoke(model, "TogglePanel");
+            System.Windows.Input.InputMethod.SetIsInputMethodEnabled(Composer(model)!, false);
             await UntilAsync(() => Composer(model)?.Text == second.Text);
             Assert.Equal(hwnd, model.SourceWindow);
             Invoke(model, "TogglePanel"); // Hide.
@@ -63,6 +70,7 @@ public sealed class WindowsRegressionTests
             second.SelectAll();
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             Invoke(model, "TogglePanel");
+            System.Windows.Input.InputMethod.SetIsInputMethodEnabled(Composer(model)!, false);
             await UntilAsync(() => Composer(model)?.Text == second.Text);
 
             // Register both layer combinations against a real message window without touching default hotkeys.
@@ -112,7 +120,7 @@ public sealed class WindowsRegressionTests
             Assert.True(image.PixelHeight > 1000, "Copy-image must include the entire result, beyond the panel viewport.");
             await ReadOnlyParagraphsUseActualRangesAsync();
         }
-        finally { model.Stop(); source.Close(); }
+        finally { model.Stop(); source.Close(); Environment.SetEnvironmentVariable("CIDA_UI_INSPECTION", inspectionBefore); }
     });
 
     private static System.Windows.Controls.TextBox? Composer(AppModel model)
@@ -237,12 +245,16 @@ public sealed class WindowsRegressionTests
         }
         finally
         {
-            // OLE may release its owner HWND after flushing. The production guard
-            // then requires the source to be foreground; restore that test precondition.
-            FocusSource(source);
-            var restored = ClipboardSnapshot.Restore(original!, hwnd, ClipboardSnapshot.SequenceNumber());
-            Assert.True(restored, "Original clipboard restore failed; untransferred formats: " +
-                string.Join(",", original!.Formats.Where(entry => entry.Handle != 0).Select(entry => entry.Format)));
+            // Cleanup is an owned write, not a source application's Ctrl+C. OLE's
+            // temporary owner HWND and foreground changes must not decide cleanup.
+            // Preserve any unrelated copy made while the interactive test runs.
+            var sequence = ClipboardSnapshot.SequenceNumber();
+            var current = System.Windows.Forms.Clipboard.GetText();
+            if (current is "newer clipboard must survive" or "clipboard before copy" || current == editor.Text)
+            {
+                Assert.True(ClipboardSnapshot.WriteOwnedText("Cida regression cleanup", sequence, out var ownedSequence));
+                Assert.True(ClipboardSnapshot.RestoreOwned(original!, ownedSequence), "Original test clipboard could not be restored; owned=" + ownedSequence + ", current=" + ClipboardSnapshot.SequenceNumber() + ", remaining=" + string.Join(",", original!.Formats.Where(entry => entry.Handle != 0).Select(entry => entry.Format)));
+            }
             ClipboardSnapshot.ReleaseWindow();
         }
     }
