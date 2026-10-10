@@ -57,6 +57,6 @@
       128,
       256
     ],
-    "method": "Pixel-aligned optical simplification of the character and caret at 16-40px; original detailed glyph at 48px and above."
+    "method": "Pixel-aligned optical simplification at 16-40px; each size antialiased separately with 8x coverage sampling. Original detailed glyph at 48px and above."
   }
 }

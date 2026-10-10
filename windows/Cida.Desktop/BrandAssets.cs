@@ -1,10 +1,21 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Windows.Media.Imaging;
+using System.Linq;
 
 namespace Cida.Desktop;
 
 public static class BrandAssets
 {
+    public static BitmapSource LoadPanelImage(double scale)
+    {
+        var pixels = Math.Max(16, (int)Math.Round(24 * scale));
+        using var stream = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Cida;component/Assets/Brand/Cida.ico")).Stream;
+        var decoder = new IconBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+        var frame = decoder.Frames.Where(item => item.PixelWidth >= pixels).OrderBy(item => item.PixelWidth).FirstOrDefault()
+            ?? decoder.Frames.OrderByDescending(item => item.PixelWidth).First();
+        frame.Freeze(); return frame;
+    }
     public static System.Drawing.Icon LoadTrayIcon()
     {
         var taskbar = FindWindow("Shell_TrayWnd", null);

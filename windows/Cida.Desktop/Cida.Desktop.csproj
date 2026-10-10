@@ -20,7 +20,7 @@
     <RootNamespace>Cida.Desktop</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Nullable>enable</Nullable>
-    <Version>0.2.0-rc.3</Version>
+    <Version>0.2.0-rc.4</Version>
     <ApplicationIcon>Assets\Brand\Cida.ico</ApplicationIcon>
   </PropertyGroup>
 

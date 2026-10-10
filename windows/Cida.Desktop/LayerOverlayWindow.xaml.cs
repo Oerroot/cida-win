@@ -23,6 +23,7 @@ public sealed class LayerOverlayWindow : Window
 
     public LayerOverlayWindow(string translation, System.Drawing.RectangleF bounds)
     {
+        Style = (Style)FindResource(typeof(Window));
         Title = "辞达 · 原处翻译";
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
@@ -43,6 +44,7 @@ public sealed class LayerOverlayWindow : Window
         };
         paper.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "Paper");
         paper.SetResourceReference(System.Windows.Controls.Border.BorderBrushProperty, "PanelBorder");
+        RenderOptions.SetClearTypeHint(paper, ClearTypeHint.Enabled);
         _text.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "Ink");
         _text.Text = translation;
         Content = paper;

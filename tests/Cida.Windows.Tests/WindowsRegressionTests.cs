@@ -239,8 +239,15 @@ public sealed class WindowsRegressionTests
             using var saved = ClipboardSnapshot.Capture();
             Assert.True(saved != null, ClipboardSnapshot.LastCaptureFailure);
             var expectedSequence = ClipboardSnapshot.SequenceNumber();
-            System.Windows.Forms.Clipboard.SetText("newer clipboard must survive");
+            // Publish the simulated other application's copy eagerly: SetText
+            // leaves a lazy OLE data object owned by this secondary STA fixture.
+            System.Windows.Forms.Clipboard.SetDataObject("newer clipboard must survive", true);
+            Assert.Equal("newer clipboard must survive", System.Windows.Forms.Clipboard.GetText());
+            var newSequence = ClipboardSnapshot.SequenceNumber();
+            Assert.NotEqual(expectedSequence, newSequence);
             Assert.False(ClipboardSnapshot.Restore(saved!, hwnd, expectedSequence));
+            var nativeText = ClipboardSnapshot.ReadText(hwnd, newSequence);
+            Assert.Equal("newer clipboard must survive", nativeText);
             Assert.Equal("newer clipboard must survive", System.Windows.Forms.Clipboard.GetText());
         }
         finally

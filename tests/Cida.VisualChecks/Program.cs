@@ -11,6 +11,8 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Point = System.Windows.Point;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 
 namespace Cida.VisualChecks;
 
@@ -33,6 +35,10 @@ public static class Program
         var model = new AppModel(store);
         model.OpenPanel();
         var panel = application.Windows.OfType<PanelWindow>().Single(); panel.Title = "辞达 · 受控界面验证";
+        panel.LocationChanged += (_, _) => {
+            Directory.CreateDirectory(profile);
+            File.AppendAllText(Path.Combine(profile, "movement-log.jsonl"), JsonSerializer.Serialize(new { left=panel.Left, top=panel.Top, utc=DateTime.UtcNow }) + "\n");
+        };
         if (args.Contains("--render-suite"))
         {
             application.Dispatcher.BeginInvoke(async () =>
@@ -84,8 +90,35 @@ public static class Program
     private static async Task RenderSuiteAsync(System.Windows.Application application, AppModel model, PanelWindow panel, string profile)
     {
         var directory = Path.Combine(profile, "render-suite"); Directory.CreateDirectory(directory);
+        void SaveMetrics(Window window, string name)
+        {
+            var hwnd = new WindowInteropHelper(window).Handle;
+            var context = GetWindowDpiAwarenessContext(hwnd);
+            var dpi = VisualTreeHelper.GetDpi(window);
+            if (!AreDpiAwarenessContextsEqual(context, (nint)(-4)) || Math.Abs(GetDpiForWindow(hwnd) - dpi.DpiScaleX * 96) > 1)
+                throw new InvalidOperationException("Native and WPF DPI contexts do not match PerMonitorV2.");
+            var layered = (GetWindowLongPtr(hwnd, -20).ToInt64() & 0x80000) != 0;
+            if (window is PanelWindow or SettingsWindow && (layered || !window.UseLayoutRounding || !window.SnapsToDevicePixels || TextOptions.GetTextFormattingMode(window) != TextFormattingMode.Display))
+                throw new InvalidOperationException("Product window is not using opaque, pixel-aligned display text rendering.");
+            File.WriteAllText(Path.Combine(directory, name + "-render-metrics.json"), JsonSerializer.Serialize(new {
+                nativeDpi = GetDpiForWindow(hwnd), scaleX = dpi.DpiScaleX, scaleY = dpi.DpiScaleY,
+                perMonitorV2 = AreDpiAwarenessContextsEqual(context, (nint)(-4)),
+                layered,
+                layoutRounding = window.UseLayoutRounding, pixelSnapping = window.SnapsToDevicePixels,
+                font = window.FontFamily.Source, formatting = TextOptions.GetTextFormattingMode(window).ToString(),
+                rendering = TextOptions.GetTextRenderingMode(window).ToString(), left = window.Left, top = window.Top,
+                width = window.ActualWidth, height = window.ActualHeight
+            }));
+        }
         using (var icon = BrandAssets.LoadTrayIcon())
             File.WriteAllText(Path.Combine(directory, "tray-icon-metrics.json"), JsonSerializer.Serialize(new { width=icon.Width, height=icon.Height }));
+        foreach (var monitor in System.Windows.Forms.Screen.AllScreens)
+        {
+            var hwnd = new WindowInteropHelper(panel).Handle;
+            SetWindowPos(hwnd, 0, monitor.WorkingArea.Left + 32, monitor.WorkingArea.Top + 32, 0, 0, 0x0001 | 0x0004 | 0x0010);
+            await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            SaveMetrics(panel, "monitor-" + monitor.DeviceName.Replace("\\", "").Replace(".", ""));
+        }
         void Save(Window window, string name, double scale = 1)
         {
             window.UpdateLayout();
@@ -97,6 +130,10 @@ public static class Program
         {
             var theme = dark ? "dark" : "light"; ThemeService.Apply(dark); panel.Show(); panel.Width = 800; panel.Height = 620;
             await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            SaveMetrics(panel, theme + "-panel");
+            var title = (FrameworkElement)panel.FindName("TitleBar");
+            if (panel.InputHitTest(title.TranslatePoint(new Point(title.ActualWidth / 2, title.ActualHeight / 2), panel)) != title)
+                throw new InvalidOperationException("Blank panel title area is not hit-testable for dragging.");
             panel.SetSourceText(""); panel.BeginResult(model.Settings.EnabledActions.First(), ""); panel.CompleteResult(); Save(panel, theme + "-empty");
             panel.SetSourceText("Good software should make the next step feel obvious.\n\nKeep the meaning. Remove the noise.");
             panel.BeginResult(model.Settings.EnabledActions.First(), panel.State.Source);
@@ -109,6 +146,7 @@ public static class Program
             panel.BeginResult(model.Settings.EnabledActions.First(), panel.State.Source); panel.AppendResult(string.Join("\n\n", Enumerable.Repeat("长文仍然清楚易读，操作按钮保持在固定位置。（本地模拟）", 100))); panel.CompleteResult(); Save(panel, theme + "-long");
             panel.Hide();
             var settings = new SettingsWindow(model); settings.Show(); ThemeService.Apply(dark);
+            SaveMetrics(settings, theme + "-settings");
             var pages = (System.Windows.Controls.TabControl)settings.FindName("Pages");
             for (var index = 0; index < 4; index++)
             {
@@ -142,6 +180,11 @@ public static class Program
         panel.Close();
         File.WriteAllText(Path.Combine(directory, "README.txt"), "Controlled renders of real product views with local synthetic data. Raster scales 1/1.25/1.5/2 are not OS DPI or multi-monitor acceptance. No external model request was sent.");
     }
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint hwnd);
+    [DllImport("user32.dll")] private static extern nint GetWindowDpiAwarenessContext(nint hwnd);
+    [DllImport("user32.dll")] private static extern bool AreDpiAwarenessContextsEqual(nint first, nint second);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern nint GetWindowLongPtr(nint hwnd, int index);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int width, int height, uint flags);
     private static async Task ServeAsync(TcpListener listener)
     {
         while (true)
