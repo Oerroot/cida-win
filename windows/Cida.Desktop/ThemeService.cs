@@ -52,10 +52,10 @@ public static class ThemeService
         }
         catch { dark ??= false; }
         _dark = dark == true;
-        string[] names = ["PanelBackground", "Paper", "PanelBorder", "Ink", "InkSecondary", "Accent", "AccentSoft", "Error", "AccentInk", "ControlBackground", "ControlBorder", "ControlHover"];
+        string[] names = ["PanelBackground", "Paper", "PanelBorder", "Ink", "InkSecondary", "Accent", "AccentSoft", "Error", "AccentInk", "ControlBackground", "ControlBorder", "ControlHover", "ControlPressed", "AccentPressed", "DisabledInk"];
         string[] colors = dark == true
-            ? ["#20251F", "#272D24", "#424A3D", "#ECEEE7", "#B2BAAB", "#94C6A2", "#354334", "#F1A79B", "#172019", "#2D342A", "#66715F", "#3B4937"]
-            : ["#FFFFFF", "#F5F3ED", "#DADDD5", "#242922", "#646C60", "#346847", "#E9EFE7", "#A43B32", "#FFFFFF", "#F8F9F6", "#B8C1B3", "#E9EFE7"];
+            ? ["#20251F", "#272D24", "#424A3D", "#ECEEE7", "#B2BAAB", "#94C6A2", "#354334", "#F1A79B", "#172019", "#2D342A", "#66715F", "#3B4937", "#465940", "#7AAC88", "#818A7A"]
+            : ["#FFFFFF", "#F5F3ED", "#DADDD5", "#242922", "#646C60", "#346847", "#E9EFE7", "#A43B32", "#FFFFFF", "#F8F9F6", "#B8C1B3", "#E9EFE7", "#DDE6D9", "#285337", "#8B9287"];
         for (var i = 0; i < names.Length; i++)
         {
             var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colors[i]));
@@ -75,6 +75,9 @@ public static class ThemeService
             app.Resources["ControlBackground"] = SystemColors.ControlBrush;
             app.Resources["ControlBorder"] = SystemColors.WindowTextBrush;
             app.Resources["ControlHover"] = SystemColors.ControlBrush;
+            app.Resources["ControlPressed"] = SystemColors.ControlBrush;
+            app.Resources["AccentPressed"] = SystemColors.HighlightBrush;
+            app.Resources["DisabledInk"] = SystemColors.GrayTextBrush;
         }
         foreach (Window window in app.Windows) ApplyWindowFrame(window);
         Changed?.Invoke();
