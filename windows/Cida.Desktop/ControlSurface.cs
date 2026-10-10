@@ -19,7 +19,7 @@ public sealed class ControlSurface : Border
             return;
         }
 
-        // Match Border's rounded layout thickness. The stroke is centered half a pixel
+        // Match Border's rounded layout thickness. The stroke is centered half its width
         // inside the bounds; its fill extends underneath it, so separately antialiased
         // inner edges cannot expose the parent's background at the corners.
         var width = UseLayoutRounding ? Math.Round(thickness.Left * dpi.DpiScaleX) / dpi.DpiScaleX : thickness.Left;
