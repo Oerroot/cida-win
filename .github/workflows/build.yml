@@ -19,6 +19,8 @@ jobs:
         run: dotnet test tests/Cida.Core.Tests --configuration Release --no-build
       - name: Windows ABI tests
         run: dotnet test tests/Cida.Windows.Tests --configuration Release --no-build
+      - name: Rounded control pixel regression
+        run: dotnet run --project tests/Cida.VisualChecks --configuration Release -- --check-control-surfaces
 
   package:
     needs: test

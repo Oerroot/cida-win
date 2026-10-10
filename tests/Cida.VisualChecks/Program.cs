@@ -26,6 +26,13 @@ public static class Program
         Environment.SetEnvironmentVariable("CIDA_UI_INSPECTION", "1");
         var application = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         ThemeService.Start();
+        if (args.Contains("--check-control-surfaces"))
+        {
+            var directory = Path.Combine(profile, "control-surfaces"); Directory.CreateDirectory(directory);
+            try { ControlSurfaceChecks.Run(directory); return 0; }
+            catch (Exception error) { File.WriteAllText(Path.Combine(directory, "error.txt"), error.ToString()); return 1; }
+            finally { ThemeService.Stop(); }
+        }
         var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port; _ = ServeAsync(listener);
         var fileStore = new SettingsFileStore(profile); var secrets = new SecretStore(profile);
@@ -90,6 +97,7 @@ public static class Program
     private static async Task RenderSuiteAsync(System.Windows.Application application, AppModel model, PanelWindow panel, string profile)
     {
         var directory = Path.Combine(profile, "render-suite"); Directory.CreateDirectory(directory);
+        ControlSurfaceChecks.Run(directory);
         void SaveMetrics(Window window, string name)
         {
             var hwnd = new WindowInteropHelper(window).Handle;
