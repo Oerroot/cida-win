@@ -21,9 +21,10 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        var profile = Path.Combine(AppContext.BaseDirectory, "inspection-profile");
+        var productionInteraction = args.Contains("--production-interaction");
+        var profile = Path.Combine(AppContext.BaseDirectory, productionInteraction ? "production-interaction-profile" : "inspection-profile");
         Environment.SetEnvironmentVariable("CIDA_PROFILE", profile);
-        Environment.SetEnvironmentVariable("CIDA_UI_INSPECTION", "1");
+        Environment.SetEnvironmentVariable("CIDA_UI_INSPECTION", productionInteraction ? null : "1");
         var application = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         ThemeService.Start();
         if (args.Contains("--check-control-surfaces"))
@@ -42,16 +43,45 @@ public static class Program
         var model = new AppModel(store);
         model.OpenPanel();
         var panel = application.Windows.OfType<PanelWindow>().Single(); panel.Title = "辞达 · 受控界面验证";
+        // Expose the fixture to desktop automation without disabling product deactivation hiding.
+        if (productionInteraction) panel.ShowInTaskbar = true;
+        void LogInteraction(object value)
+        {
+            Directory.CreateDirectory(profile);
+            File.AppendAllText(Path.Combine(profile, "interaction-log.jsonl"), JsonSerializer.Serialize(value) + "\n");
+        }
+        panel.AddHandler(UIElement.PreviewMouseLeftButtonDownEvent, new System.Windows.Input.MouseButtonEventHandler((_, e) =>
+            LogInteraction(new { kind="mouse-down", source=e.OriginalSource.GetType().Name, x=e.GetPosition(panel).X, y=e.GetPosition(panel).Y })), true);
+        panel.Deactivated += (_, _) => LogInteraction(new { kind="deactivated", visible=panel.IsVisible });
+        panel.IsVisibleChanged += (_, _) => LogInteraction(new { kind="visibility", visible=panel.IsVisible });
+        var interactionSource = HwndSource.FromHwnd(new WindowInteropHelper(panel).Handle);
+        interactionSource.AddHook((nint hwnd, int message, nint wParam, nint lParam, ref bool handled) => {
+            if (message is 0x231 or 0x232) LogInteraction(new { kind=message==0x231 ? "enter-move" : "exit-move", left=panel.Left, top=panel.Top });
+            return 0;
+        });
         panel.LocationChanged += (_, _) => {
             Directory.CreateDirectory(profile);
             File.AppendAllText(Path.Combine(profile, "movement-log.jsonl"), JsonSerializer.Serialize(new { left=panel.Left, top=panel.Top, utc=DateTime.UtcNow }) + "\n");
         };
-        if (args.Contains("--render-suite"))
+        if (args.Contains("--render-suite") || args.Contains("--check-panel-chrome"))
         {
             application.Dispatcher.BeginInvoke(async () =>
             {
                 var exit = 0;
-                try { await RenderSuiteAsync(application, model, panel, profile); }
+                try
+                {
+                    if (args.Contains("--check-panel-chrome"))
+                    {
+                        foreach (var dark in new[] { false, true })
+                        foreach (var width in new[] { 800d, 340d })
+                        {
+                            ThemeService.Apply(dark); panel.Width = width;
+                            await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                            PanelChromeChecks.Run(panel, Path.Combine(profile, "panel-chrome", $"{(dark ? "dark" : "light")}-{width}.json"));
+                        }
+                    }
+                    else await RenderSuiteAsync(application, model, panel, profile);
+                }
                 catch (Exception error) { Directory.CreateDirectory(profile); File.WriteAllText(Path.Combine(profile, "render-error.txt"), error.ToString()); exit = 1; }
                 finally { listener.Stop(); model.Stop(); ThemeService.Stop(); application.Shutdown(exit); }
             });
@@ -139,9 +169,7 @@ public static class Program
             var theme = dark ? "dark" : "light"; ThemeService.Apply(dark); panel.Show(); panel.Width = 800; panel.Height = 620;
             await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             SaveMetrics(panel, theme + "-panel");
-            var title = (FrameworkElement)panel.FindName("TitleBar");
-            if (panel.InputHitTest(title.TranslatePoint(new Point(title.ActualWidth / 2, title.ActualHeight / 2), panel)) != title)
-                throw new InvalidOperationException("Blank panel title area is not hit-testable for dragging.");
+            PanelChromeChecks.Run(panel, Path.Combine(directory, theme + "-caption-hit-tests.json"));
             panel.SetSourceText(""); panel.BeginResult(model.Settings.EnabledActions.First(), ""); panel.CompleteResult(); Save(panel, theme + "-empty");
             panel.SetSourceText("Good software should make the next step feel obvious.\n\nKeep the meaning. Remove the noise.");
             panel.BeginResult(model.Settings.EnabledActions.First(), panel.State.Source);

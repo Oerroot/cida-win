@@ -48,12 +48,18 @@ public partial class PanelWindow : Window
         IsVisibleChanged += (_, _) => { if (IsVisible) _shownAt = DateTime.UtcNow; DevelopmentTrace.Stage("panel visible=" + IsVisible); };
         SourceInitialized += (_, _) => { ThemeService.ApplyWindowFrame(this); WindowPlacement.NearCursor(this); RefreshBrandIcon(); };
         DpiChanged += (_, _) => RefreshBrandIcon();
-        TitleBar.MouseLeftButtonDown += (_, e) => { if (e.LeftButton == MouseButtonState.Pressed) DragMove(); };
         Closed += (_, _) => { _cancellation?.Cancel(); _renderClock.Stop(); };
         Deactivated += (_, _) =>
         {
             if (Environment.GetEnvironmentVariable("CIDA_UI_INSPECTION") != "1" && !_composing && IsVisible && !_model.IsSettingsVisible && DateTime.UtcNow - _shownAt > TimeSpan.FromMilliseconds(300)) Hide();
         };
+    }
+    private void OnCaptionSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // The native caption starts at the window's top edge, including the outer
+        // border and all header padding. Only the two buttons opt back into client input.
+        var captionBottom = CaptionBar.TranslatePoint(new System.Windows.Point(0, CaptionBar.ActualHeight), this).Y;
+        System.Windows.Shell.WindowChrome.GetWindowChrome(this).CaptionHeight = captionBottom;
     }
     private void RefreshBrandIcon() => BrandIcon.Source = BrandAssets.LoadPanelImage(VisualTreeHelper.GetDpi(this).DpiScaleX);
     public void RefreshConfiguration()

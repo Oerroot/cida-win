@@ -4,11 +4,13 @@
     <Border Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1" CornerRadius="14" ClipToBounds="True">
         <Grid>
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="1.0*"/><RowDefinition Height="Auto"/><RowDefinition Height="1.6*"/></Grid.RowDefinitions>
-            <Grid Background="Transparent" Margin="28,18,20,0" x:Name="TitleBar">
+            <Border x:Name="CaptionBar" Background="Transparent" Padding="28,18,20,0" SizeChanged="OnCaptionSizeChanged">
+            <Grid Background="Transparent" x:Name="TitleBar">
                 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Image x:Name="BrandIcon" Width="24" Height="24" Margin="0,0,9,0" RenderOptions.BitmapScalingMode="HighQuality"/><TextBlock Text="辞达" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/></StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal"><Button x:Name="SettingsButton" Click="OnSettings" ToolTip="设置 · Ctrl+," AutomationProperties.Name="设置"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE713;" Margin="0,0,7,0" VerticalAlignment="Center"/><TextBlock Text="设置"/></StackPanel></Button><Button x:Name="HideButton" Click="OnHide" ToolTip="隐藏面板 · Esc" AutomationProperties.Name="关闭" Margin="0"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE8BB;" Margin="0,0,7,0" VerticalAlignment="Center"/><TextBlock Text="关闭"/></StackPanel></Button></StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal"><Button x:Name="SettingsButton" WindowChrome.IsHitTestVisibleInChrome="True" Click="OnSettings" ToolTip="设置 · Ctrl+," AutomationProperties.Name="设置"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE713;" Margin="0,0,7,0" VerticalAlignment="Center"/><TextBlock Text="设置"/></StackPanel></Button><Button x:Name="HideButton" WindowChrome.IsHitTestVisibleInChrome="True" Click="OnHide" ToolTip="隐藏面板 · Esc" AutomationProperties.Name="关闭" Margin="0"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE8BB;" Margin="0,0,7,0" VerticalAlignment="Center"/><TextBlock Text="关闭"/></StackPanel></Button></StackPanel>
             </Grid>
+            </Border>
             <Grid Grid.Row="1" Margin="28,16,28,20">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
                 <Grid Margin="0,0,0,12"><TextBlock Text="原文" FontSize="12" Foreground="{DynamicResource InkSecondary}"/><TextBlock x:Name="SourceCount" HorizontalAlignment="Right" FontSize="12" Foreground="{DynamicResource InkSecondary}"/></Grid>
