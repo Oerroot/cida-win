@@ -35,6 +35,7 @@ public partial class PanelWindow : Window
     public PanelWindow(AppModel model)
     {
         _model = model; ThemeService.Apply(); InitializeComponent(); _composer = Composer;
+        Style = (Style)FindResource(typeof(Window));
         ShowActivated = false;
         if (Environment.GetEnvironmentVariable("CIDA_UI_INSPECTION") == "1") ShowInTaskbar = true;
         State.ActionId = model.Settings.EnabledActions.First().Id;
@@ -45,7 +46,8 @@ public partial class PanelWindow : Window
         _renderClock.Tick += (_, _) => { if (_renderQueued) RenderResult(); };
         _renderClock.Start();
         IsVisibleChanged += (_, _) => { if (IsVisible) _shownAt = DateTime.UtcNow; DevelopmentTrace.Stage("panel visible=" + IsVisible); };
-        SourceInitialized += (_, _) => WindowPlacement.NearCursor(this);
+        SourceInitialized += (_, _) => { ThemeService.ApplyWindowFrame(this); WindowPlacement.NearCursor(this); RefreshBrandIcon(); };
+        DpiChanged += (_, _) => RefreshBrandIcon();
         TitleBar.MouseLeftButtonDown += (_, e) => { if (e.LeftButton == MouseButtonState.Pressed) DragMove(); };
         Closed += (_, _) => { _cancellation?.Cancel(); _renderClock.Stop(); };
         Deactivated += (_, _) =>
@@ -53,6 +55,7 @@ public partial class PanelWindow : Window
             if (Environment.GetEnvironmentVariable("CIDA_UI_INSPECTION") != "1" && !_composing && IsVisible && !_model.IsSettingsVisible && DateTime.UtcNow - _shownAt > TimeSpan.FromMilliseconds(300)) Hide();
         };
     }
+    private void RefreshBrandIcon() => BrandIcon.Source = BrandAssets.LoadPanelImage(VisualTreeHelper.GetDpi(this).DpiScaleX);
     public void RefreshConfiguration()
     {
         ConfigureButton.Visibility = _model.Settings.IsModelServiceComplete ? Visibility.Collapsed : Visibility.Visible;

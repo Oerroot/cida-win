@@ -40,6 +40,7 @@ public sealed class CaptureWindow : Window
     {
         _model = model;
         _ocr = ocr;
+        Style = (Style)FindResource(typeof(Window));
         // Capture before this topmost window is visible, so the image cannot include itself.
         var screen = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Cursor.Position);
         _frozen = capturer.Capture(screen.Bounds);

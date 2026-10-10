@@ -83,19 +83,23 @@ image.resize((256, 256), Image.Resampling.LANCZOS).save(brand / "Cida.png")
 # The detailed serif glyph needs optical simplification below 48px. Draw each
 # small frame on its own pixel grid; never downsample a selected 32px tray icon.
 def small_mark(size):
-    bitmap = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    samples = 8
+    bitmap = Image.new("RGBA", (size*samples, size*samples), (0, 0, 0, 0))
     pen = ImageDraw.Draw(bitmap)
-    pen.rounded_rectangle((0, 0, size-1, size-1), radius=round(size/8), fill="#F5F3ED")
+    pen.rounded_rectangle((0, 0, size*samples-1, size*samples-1), radius=round(size/8)*samples, fill="#F5F3ED")
     scale = size/16
     def line(points, color="#242922"):
-        pen.line([(round(x*scale), round(y*scale)) for x,y in points], fill=color, width=max(1,round(scale)))
+        width = max(1,round(scale))
+        # Keep straight stems on pixel boundaries, antialias diagonals and curves.
+        offset = samples//2 if width % 2 else 0
+        pen.line([(round(x*scale)*samples+offset, round(y*scale)*samples+offset) for x,y in points], fill=color, width=width*samples)
     # 舌 + 辛 keep the character and caret recognizable with complete pixel stems.
     for points in [[(2,3),(6,2)],[(4,3),(4,7)],[(1,5),(7,5)],[(2,8),(6,8),(6,13),(2,13),(2,8)],
                    [(10,2),(11,2)],[(8,4),(13,4)],[(9,5),(10,7)],[(12,5),(11,7)],
                    [(8,8),(13,8)],[(8,11),(13,11)],[(10,8),(10,14)]]:
         line(points)
     line([(15,4),(15,13)], "#346847")
-    return bitmap
+    return bitmap.resize((size,size), Image.Resampling.LANCZOS)
 sizes = [16,20,24,28,32,40,48,64,128,256]
 frames = [small_mark(size) if size < 48 else image.resize((size,size), Image.Resampling.LANCZOS) for size in sizes]
 frames[0].save(brand / "Cida16.png")
@@ -115,6 +119,6 @@ manifest = brand.parent / "provenance.json"
 provenance = json.loads(manifest.read_text(encoding="utf-8")) if manifest.exists() else {"upstream":"Xuanwo/cida", "commit":"473013c93e052e08603ffd2faccda0d6dafbb5be"}
 if records: provenance["font_derivatives"] = records
 provenance["brand_source"] = ["glyph.svg", "caret.svg"]
-provenance["brand_small_frames"] = {"sizes":sizes, "method":"Pixel-aligned optical simplification of the character and caret at 16-40px; original detailed glyph at 48px and above."}
+provenance["brand_small_frames"] = {"sizes":sizes, "method":"Pixel-aligned optical simplification at 16-40px; each size antialiased separately with 8x coverage sampling. Original detailed glyph at 48px and above."}
 manifest.write_text(json.dumps(provenance, ensure_ascii=False, indent=2), encoding="utf-8")
 print("Static fonts, Windows ICO and provenance written.")

@@ -16,6 +16,11 @@ public static class ThemeService
         if (handle == 0) return;
         var enabled = _dark ? 1 : 0;
         DwmSetWindowAttribute(handle, 20, ref enabled, sizeof(int));
+        if (window is PanelWindow)
+        {
+            var rounded = 2; // DWMWCP_ROUND: native corners, without a layered HWND.
+            DwmSetWindowAttribute(handle, 33, ref rounded, sizeof(int));
+        }
     }
     [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int size);
     public static void Start()
