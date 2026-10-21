@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.Win32;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
@@ -10,6 +11,52 @@ public static class ThemeService
     public static event Action? Changed;
     private static bool _listening;
     private static bool _dark;
+
+    // The palette is the single source of truth for both the brushes Apply installs and the
+    // contrast test in tests/Cida.Windows.Tests. #80 keeps three text levels: primary (Ink),
+    // secondary for essential instructions, feedback and quiet commands, tertiary for still
+    // readable but less important labels, and InkHint only for decorative key hints (never for
+    // text the user must read to act).
+    private static readonly string[] PaletteNames =
+    [
+        "PanelBackground", "Paper", "PanelBorder", "Ink", "InkSecondary", "InkTertiary", "InkHint",
+        "Accent", "AccentSoft", "Error", "AccentInk", "ControlBackground", "ControlBorder",
+        "ControlHover", "ControlPressed", "AccentPressed", "DisabledInk",
+    ];
+
+    // Light secondary is the pre-#80 #646C60: #80 folds the old lighter hint into InkHint instead
+    // of lightening essential text. Tertiary stays above the 3:1 large/secondary-text floor.
+    private static readonly string[] LightPalette =
+    [
+        "#FFFFFF", "#F5F3ED", "#DADDD5", "#242922", "#646C60", "#7A8375", "#A6ADA0",
+        "#346847", "#E9EFE7", "#A43B32", "#FFFFFF", "#F8F9F6", "#B8C1B3",
+        "#E9EFE7", "#DDE6D9", "#285337", "#8B9287",
+    ];
+
+    // Dark secondary is unchanged and comfortably readable; dark tertiary is a quieter step that
+    // still clears 3:1 on both dark surfaces.
+    private static readonly string[] DarkPalette =
+    [
+        "#20251F", "#272D24", "#424A3D", "#ECEEE7", "#B2BAAB", "#8A947F", "#6B7463",
+        "#94C6A2", "#354334", "#F1A79B", "#172019", "#2D342A", "#66715F",
+        "#3B4937", "#465940", "#7AAC88", "#818A7A",
+    ];
+
+    /// <summary>
+    /// The named colors this theme installs, in the appearance the caller asks for. Pure and
+    /// headless: the design-token test checks WCAG contrast from here without a WPF application.
+    /// </summary>
+    public static IReadOnlyList<(string Name, string Hex)> Palette(bool dark)
+    {
+        var colors = dark ? DarkPalette : LightPalette;
+        var entries = new (string Name, string Hex)[PaletteNames.Length];
+        for (var index = 0; index < PaletteNames.Length; index++)
+        {
+            entries[index] = (PaletteNames[index], colors[index]);
+        }
+        return entries;
+    }
+
     public static void ApplyWindowFrame(Window window)
     {
         var handle = new WindowInteropHelper(window).Handle;
@@ -52,14 +99,10 @@ public static class ThemeService
         }
         catch { dark ??= false; }
         _dark = dark == true;
-        string[] names = ["PanelBackground", "Paper", "PanelBorder", "Ink", "InkSecondary", "Accent", "AccentSoft", "Error", "AccentInk", "ControlBackground", "ControlBorder", "ControlHover", "ControlPressed", "AccentPressed", "DisabledInk"];
-        string[] colors = dark == true
-            ? ["#20251F", "#272D24", "#424A3D", "#ECEEE7", "#B2BAAB", "#94C6A2", "#354334", "#F1A79B", "#172019", "#2D342A", "#66715F", "#3B4937", "#465940", "#7AAC88", "#818A7A"]
-            : ["#FFFFFF", "#F5F3ED", "#DADDD5", "#242922", "#646C60", "#346847", "#E9EFE7", "#A43B32", "#FFFFFF", "#F8F9F6", "#B8C1B3", "#E9EFE7", "#DDE6D9", "#285337", "#8B9287"];
-        for (var i = 0; i < names.Length; i++)
+        foreach (var (name, hex) in Palette(_dark))
         {
-            var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colors[i]));
-            brush.Freeze(); app.Resources[names[i]] = brush;
+            var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+            brush.Freeze(); app.Resources[name] = brush;
         }
         if (SystemParameters.HighContrast)
         {
@@ -67,6 +110,8 @@ public static class ThemeService
             app.Resources["Paper"] = SystemColors.WindowBrush;
             app.Resources["Ink"] = SystemColors.WindowTextBrush;
             app.Resources["InkSecondary"] = SystemColors.WindowTextBrush;
+            app.Resources["InkTertiary"] = SystemColors.WindowTextBrush;
+            app.Resources["InkHint"] = SystemColors.WindowTextBrush;
             app.Resources["Accent"] = SystemColors.HighlightBrush;
             app.Resources["AccentInk"] = SystemColors.HighlightTextBrush;
             app.Resources["AccentSoft"] = SystemColors.ControlBrush;
