@@ -209,6 +209,24 @@ public sealed class AppModel
     }
     public void OpenPanel() => ShowPanel(readSelection: false);
 
+    /// <summary>The Settings page to open on the next construction, or -1 for the usual page.</summary>
+    public int SettingsInitialPage { get; private set; } = -1;
+
+    /// <summary>Opens Settings on the model page; a configuration failure in the panel uses this.</summary>
+    public void ShowModelSettings()
+    {
+        SettingsInitialPage = 0;
+        ShowSettings();
+    }
+
+    /// <summary>Reads and clears the requested initial page; new Settings windows consume it once.</summary>
+    internal int TakeSettingsInitialPage()
+    {
+        var page = SettingsInitialPage;
+        SettingsInitialPage = -1;
+        return page;
+    }
+
     public void ShowSettings()
     {
         _panel?.Hide();
