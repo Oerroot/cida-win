@@ -121,15 +121,31 @@ public sealed class LayerSession : IDisposable
         var action = settings.EffectiveActions.First(a => a.Id == ProcessingAction.TranslationId);
         try
         {
-            var request = _target != null
-                ? new ProcessingRequest { Text = texts[0], Mode = ProcessingMode.Translate, ActionPrompt = action.Prompt, MyLanguage = target, ForeignLanguage = settings.RequestLanguages().Foreign }
-                : new ProcessingRequest { Text = LayerTranslationRequest.BuildUserMessage(texts), Mode = ProcessingMode.Translate, ActionPrompt = action.Prompt, MyLanguage = target, ForeignLanguage = target, LayerTargetLanguage = target };
-            var result = new System.Text.StringBuilder();
-            await new ModelServiceClient().SendAsync(ModelServiceClient.Prepare(request, settings), settings.ModelService.Format,
-                new SecretRedactor(settings.ApiKey), null, piece => result.Append(piece), _cancellation.Token);
-            IReadOnlyDictionary<int, string>? parsed = _target != null
-                ? string.IsNullOrWhiteSpace(result.ToString()) ? null : new Dictionary<int, string> { [0] = result.ToString().Trim() }
-                : LayerTranslationRequest.ParseReply(result.ToString().Trim(), texts.Count);
+            IReadOnlyDictionary<int, string>? parsed;
+            if (_target != null)
+            {
+                var request = new ProcessingRequest
+                {
+                    Text = texts[0], Mode = ProcessingMode.Translate, ActionPrompt = action.Prompt,
+                    MyLanguage = target, ForeignLanguage = settings.RequestLanguages().Foreign,
+                };
+                var result = new System.Text.StringBuilder();
+                await new ModelServiceClient().SendAsync(ModelServiceClient.Prepare(request, settings), settings.ModelService.Format,
+                    new SecretRedactor(settings.ApiKey), null, piece => result.Append(piece), _cancellation.Token);
+                parsed = string.IsNullOrWhiteSpace(result.ToString())
+                    ? null
+                    : new Dictionary<int, string> { [0] = result.ToString().Trim() };
+            }
+            else
+            {
+                // One numbered-JSON request per batch; when the service rejects the batch for
+                // input length it is halved, and a long paragraph is split at a lossless
+                // placeholder-safe boundary, so ids stay aligned with `texts` (#73).
+                var translated = await LayerTranslationRequest.TranslateWithLengthRecoveryAsync(
+                    new ModelServiceClient(), texts, target, settings, action.Prompt, _cancellation.Token);
+                parsed = translated.Select((text, id) => (id, text))
+                    .ToDictionary(pair => pair.id, pair => pair.text);
+            }
             if (_disposed) return;
             if (parsed == null) { _retryAfter = DateTime.UtcNow.AddSeconds(10); return; }
             foreach (var (id, text) in parsed) _cache.Set(CacheKey(texts[id]), text);
