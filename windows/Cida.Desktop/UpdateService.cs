@@ -78,7 +78,7 @@ public sealed class UpdateService
     /// <summary>Notified after every state change.</summary>
     public event Action? Changed;
 
-    public static string Version => System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(App).Assembly)?.InformationalVersion.Split('+')[0] ?? "0.2.0-rc.4";
+    public static string Version => System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(App).Assembly)?.InformationalVersion.Split('+')[0] ?? "0.2.0-rc.7";
 
     private void Notify() => Changed?.Invoke();
 
