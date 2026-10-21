@@ -7,6 +7,9 @@
     <SolidColorBrush x:Key="ControlHover" Color="#E9EFE7"/>
     <SolidColorBrush x:Key="Ink" Color="#242922"/>
     <SolidColorBrush x:Key="InkSecondary" Color="#646C60"/>
+    <!-- #80: readable-but-quieter labels; hints are decorative only and never carry instructions. -->
+    <SolidColorBrush x:Key="InkTertiary" Color="#7A8375"/>
+    <SolidColorBrush x:Key="InkHint" Color="#A6ADA0"/>
     <SolidColorBrush x:Key="Accent" Color="#346847"/>
     <SolidColorBrush x:Key="AccentSoft" Color="#E9EFE7"/>
     <SolidColorBrush x:Key="AccentInk" Color="#FFFFFF"/>

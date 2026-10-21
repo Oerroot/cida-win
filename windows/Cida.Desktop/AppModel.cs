@@ -41,6 +41,29 @@ public sealed class AppModel
     private CancellationTokenSource? _recognitionCancellation;
     public bool IsSettingsVisible => _settingsWindow?.IsVisible == true;
     public UpdateService Updates { get; } = new();
+
+    /// <summary>
+    /// Settings' saved-action trial engine (#74). It lives on the model so a reference result
+    /// survives closing and reopening Settings. Trials always use the saved configuration.
+    /// </summary>
+    public ActionEditor ActionEditor { get; } = new(RunActionTrialAsync);
+
+    /// <summary>
+    /// The last panel request's recovery information (#73); Settings passes it to the
+    /// configuration handoff so a request failure is not mistaken for a connection check.
+    /// </summary>
+    public ProcessingFailure? LastPanelFailure { get; private set; }
+
+    private static Task RunActionTrialAsync(
+        ProcessingRequest request, CidaSettings settings, Action<string> onText, CancellationToken cancellationToken) =>
+        new ModelServiceClient().SendAsync(
+            ModelServiceClient.Prepare(request, settings),
+            settings.ModelService.Format,
+            new SecretRedactor(settings.ApiKey),
+            null,
+            onText,
+            cancellationToken);
+
     private readonly List<string> _hotkeyFailures = [];
     public IReadOnlyList<string> HotkeyFailures => _hotkeyFailures;
 
@@ -61,6 +84,11 @@ public sealed class AppModel
         ApplyShortcuts();
         ListenForConfigurationChanges();
         WarmUpOcr();
+        // The Settings page owns the "once confirmed, install and restart" flow (#79): it
+        // reports visibility through SetWatched and this hook stops panel work right before
+        // the updater replaces the build.
+        Updates.PrepareForRestart = PrepareForUpdate;
+        Updates.SetWatched(false);
         _ = Updates.CheckDailyAsync();
         if (!_settings.IsModelServiceComplete) ShowPanel(readSelection: false);
         DevelopmentTrace.Stage("start complete modelConfigured=" + _settings.IsModelServiceComplete);
@@ -186,6 +214,24 @@ public sealed class AppModel
     }
     public void OpenPanel() => ShowPanel(readSelection: false);
 
+    /// <summary>The Settings page to open on the next construction, or -1 for the usual page.</summary>
+    public int SettingsInitialPage { get; private set; } = -1;
+
+    /// <summary>Opens Settings on the model page; a configuration failure in the panel uses this.</summary>
+    public void ShowModelSettings()
+    {
+        SettingsInitialPage = 0;
+        ShowSettings();
+    }
+
+    /// <summary>Reads and clears the requested initial page; new Settings windows consume it once.</summary>
+    internal int TakeSettingsInitialPage()
+    {
+        var page = SettingsInitialPage;
+        SettingsInitialPage = -1;
+        return page;
+    }
+
     public void ShowSettings()
     {
         _panel?.Hide();
@@ -264,17 +310,26 @@ public sealed class AppModel
 
     public ConfigurationStore Store => _store;
 
-    /// <summary>Sends a processing request and streams the reply to the panel.</summary>
+    /// <summary>
+    /// Sends a processing request and streams the reply to the panel. Length rejections are
+    /// recovered by <see cref="ModelServiceSegmentation.SendRecoveringLengthAsync"/> (#73), and a
+    /// failure ends the result with safe recovery information instead of provider text.
+    /// </summary>
     public async void Submit(PanelWindow panel, string text, ProcessingAction action)
     {
         var serial = ++_resultSerial;
         panel.BeginResult(action, text);
-        if (!_settings.IsModelServiceComplete)
+        // A new request owns the recovery state; the previous failure must not outlive it.
+        LastPanelFailure = null;
+        var settings = _settings;
+        if (!settings.IsModelServiceComplete)
         {
-            panel.FailResult("请先打开设置，配置模型服务。");
+            var failure = new ProcessingFailure(
+                ProcessingFailureCategory.Configuration, settings.ModelService.Model, settings.ModelServiceFingerprint);
+            LastPanelFailure = failure;
+            panel.FailResult(failure, "请先打开设置，配置模型服务。");
             return;
         }
-        var settings = _settings;
         var languages = settings.RequestLanguages();
         var request = new ProcessingRequest
         {
@@ -288,12 +343,10 @@ public sealed class AppModel
         panel.BindCancellation(cancellation);
         try
         {
-            var prepared = ModelServiceClient.Prepare(request, settings);
-            await _client.SendAsync(
-                prepared,
-                settings.ModelService.Format,
-                new SecretRedactor(settings.ApiKey),
-                null,
+            await ModelServiceSegmentation.SendRecoveringLengthAsync(
+                _client,
+                request,
+                settings,
                 piece => Dispatcher.BeginInvoke(() =>
                 {
                     if (serial == _resultSerial && !cancellation.IsCancellationRequested) panel.AppendResult(piece);
@@ -306,9 +359,12 @@ public sealed class AppModel
         }
         catch (ModelServiceException error)
         {
+            var failure = ProcessingFailure.From(error, settings);
             await Dispatcher.InvokeAsync(() =>
             {
-                if (serial == _resultSerial) panel.FailResult(error.Error.Description());
+                if (serial != _resultSerial) return;
+                LastPanelFailure = failure;
+                panel.FailResult(failure);
             });
         }
         catch (OperationCanceledException)
@@ -320,7 +376,15 @@ public sealed class AppModel
         }
         catch (Exception)
         {
-            if (serial == _resultSerial) panel.FailResult("请求未能完成，请检查连接后重试。");
+            // Anything unrecognized is recoverable, but it is not safe to show its prose.
+            var failure = new ProcessingFailure(
+                ProcessingFailureCategory.Unknown, settings.ModelService.Model, settings.ModelServiceFingerprint);
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (serial != _resultSerial) return;
+                LastPanelFailure = failure;
+                panel.FailResult(failure, "请求未能完成，请检查连接后重试。");
+            });
         }
         finally { panel.UnbindCancellation(cancellation); cancellation.Dispose(); }
     }

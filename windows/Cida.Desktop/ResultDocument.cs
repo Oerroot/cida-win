@@ -1,3 +1,4 @@
+using Cida.Core;
 using System;
 using System.Linq;
 using System.Windows.Documents;
@@ -25,14 +26,30 @@ internal static class ResultDocument
             document.Blocks.Add(paragraph);
         }
     }
-    public static BitmapSource Image(string text, string title)
+
+    /// <summary>Copies a finished result as one image (the long-standing local entry point).</summary>
+    public static BitmapSource Image(string text, string title) => Image(text, title, ResultPhase.Completed);
+
+    /// <summary>
+    /// Copies a result as one image, marking unfinished output the way upstream ShareCard does
+    /// (#73): the result gets a trailing ellipsis and one quiet line naming what interrupted it,
+    /// while a finished result is drawn exactly as before.
+    /// </summary>
+    internal static BitmapSource Image(string text, string title, ResultPhase phase)
     {
+        var mark = PanelPresentation.IncompleteMarkText(phase);
         // Render the entire result independently of the viewport. Refuse oversized images explicitly.
         var document = new FlowDocument { PageWidth = 744, ColumnWidth = double.PositiveInfinity, PagePadding = new Thickness(28), FontSize = 18, LineHeight = 30 };
         document.SetResourceReference(TextElement.FontFamilyProperty, "ReadingFont");
         document.SetResourceReference(TextElement.ForegroundProperty, "Ink");
-        Render(document, text);
+        Render(document, PanelPresentation.ImageResultText(text, phase));
         document.Blocks.InsertBefore(document.Blocks.FirstBlock, new Paragraph(new Run("辞达 · " + title)) { FontSize = 13, Margin = new Thickness(0, 0, 0, 20), FontFamily = new FontFamily("Segoe UI, Microsoft YaHei UI") });
+        if (mark != null)
+        {
+            var markLine = new Paragraph(new Run(mark)) { FontSize = 12, Margin = new Thickness(0, 16, 0, 0) };
+            markLine.SetResourceReference(TextElement.ForegroundProperty, "InkSecondary");
+            document.Blocks.Add(markLine);
+        }
         var viewer = new FlowDocumentScrollViewer { Document = document, Width = 744, IsToolBarVisible = false, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled };
         viewer.SetResourceReference(Control.BackgroundProperty, "Paper");
         viewer.Measure(new Size(744, double.PositiveInfinity));
