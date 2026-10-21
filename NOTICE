@@ -8,7 +8,7 @@ licensed under the Apache License, Version 2.0.
 The macOS original's product semantics, protocol behavior, prompt
 contract and interaction design were studied and reimplemented for
 Windows in C# / .NET / WPF. Brand glyphs and font sources are derived
-from upstream commit 473013c93e052e08603ffd2faccda0d6dafbb5be.
+from upstream commit 3099e0dcbc2bafe0a86e6a04d1941b78afacbfd6.
 
 Source Serif 4: Copyright Adobe, SIL Open Font License 1.1.
 Noto Serif SC: Copyright the Noto project authors, SIL Open Font License 1.1.

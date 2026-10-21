@@ -15,6 +15,12 @@ public sealed class PanelState
     public ResultPhase Phase { get; private set; } = ResultPhase.Completed;
     public string Result => _result.ToString();
     public string? Error { get; private set; }
+
+    /// <summary>
+    /// The safe recovery information of a failed request (#73): the panel explains the category
+    /// and offers retry or model settings; provider text and the user's text stay out of it.
+    /// </summary>
+    public ProcessingFailure? Failure { get; private set; }
     public bool IsStale => SubmittedSource != null &&
         (Source != SubmittedSource || ActionId != SubmittedActionId);
     public string StaleReason => Source != SubmittedSource ? "原文已修改" : "动作已改变";
@@ -24,7 +30,7 @@ public sealed class PanelState
         SubmittedSource = source;
         SubmittedActionId = actionId;
         SubmittedConfiguration = configuration;
-        _result.Clear(); Error = null; Phase = ResultPhase.Streaming;
+        _result.Clear(); Error = null; Failure = null; Phase = ResultPhase.Streaming;
         return ++_serial;
     }
     public bool Append(long serial, string text)
@@ -36,6 +42,18 @@ public sealed class PanelState
     {
         if (serial != _serial || Phase != ResultPhase.Streaming) return false;
         Phase = phase; Error = error; return true;
+    }
+
+    /// <summary>
+    /// Ends the request with a recovery failure while keeping the text already streamed: only
+    /// the current streaming request can fail, exactly once, and late appends or finishes from
+    /// the same or an older request are rejected.
+    /// </summary>
+    public bool Fail(long serial, ProcessingFailure failure)
+    {
+        ArgumentNullException.ThrowIfNull(failure);
+        if (serial != _serial || Phase != ResultPhase.Streaming) return false;
+        Phase = ResultPhase.Failed; Failure = failure; return true;
     }
     public void Stop() { if (Phase == ResultPhase.Streaming) Phase = ResultPhase.Stopped; }
 }

@@ -27,6 +27,20 @@ public static class Program
         Environment.SetEnvironmentVariable("CIDA_UI_INSPECTION", productionInteraction ? null : "1");
         var application = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         ThemeService.Start();
+        if (args.Contains("--check-sync-recovery"))
+        {
+            application.Dispatcher.BeginInvoke(async () =>
+            {
+                var exit = 0;
+                var directory = Path.Combine(profile, "sync-recovery"); Directory.CreateDirectory(directory);
+                File.Delete(Path.Combine(directory, "result.json"));
+                File.Delete(Path.Combine(directory, "error.txt"));
+                try { await SyncRecoveryChecks.RunAsync(directory); }
+                catch (Exception error) { File.WriteAllText(Path.Combine(directory, "error.txt"), error.ToString()); exit = 1; }
+                finally { ThemeService.Stop(); application.Shutdown(exit); }
+            });
+            return application.Run();
+        }
         if (args.Contains("--check-control-surfaces"))
         {
             var directory = Path.Combine(profile, "control-surfaces"); Directory.CreateDirectory(directory);

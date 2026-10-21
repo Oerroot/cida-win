@@ -14,7 +14,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>Cida.Cli</RootNamespace>
     <Nullable>enable</Nullable>
-    <Version>0.2.0-rc.5</Version>
+    <Version>0.2.0-rc.7</Version>
   </PropertyGroup>
 
 </Project>

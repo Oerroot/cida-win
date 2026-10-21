@@ -77,4 +77,16 @@ public sealed class ExperienceTests
         Assert.False((new CidaSettings { ImproveShortcut = GlobalShortcut.AltD.AddingShift() }).HasValidShortcuts);
         Assert.False((new CidaSettings { ImproveShortcut = GlobalShortcut.AltA }).HasValidShortcuts);
     }
+    [Fact]
+    public void EveryShortcutActionHasItsDocumentedDefault()
+    {
+        Assert.Equal(GlobalShortcut.AltA, GlobalShortcutAction.ShowPanel.DefaultShortcut());
+        Assert.Equal(GlobalShortcut.AltS, GlobalShortcutAction.CaptureText.DefaultShortcut());
+        Assert.Equal(GlobalShortcut.AltD, GlobalShortcutAction.TranslationLayer.DefaultShortcut());
+        Assert.Equal(GlobalShortcut.AltF, GlobalShortcutAction.ImproveAndReplace.DefaultShortcut());
+        foreach (var action in Enum.GetValues<GlobalShortcutAction>())
+        {
+            Assert.Equal(action.DefaultShortcut(), new CidaSettings().ShortcutFor(action));
+        }
+    }
 }

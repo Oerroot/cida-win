@@ -31,6 +31,16 @@ public static class TrayMenu
             images[item] = item.Image!;
             menu.Items.Add(item); return item;
         }
+        // Deferred update install (#79): shown while a found or downloaded update waits for its
+        // one confirmation, so a download that finished while the panel was closed is not lost.
+        var installUpdate = Add("安装更新", "\uE896", () =>
+        {
+            try { _ = model.Updates.InstallAndRestartAsync(); }
+            catch { /* The updater reports its own failure through Updates.Status. */ }
+        });
+        installUpdate.Visible = false;
+        var installSeparator = new ToolStripSeparator { Visible = false };
+        menu.Items.Add(installSeparator);
         Add("显示面板", "\uE8A7", model.OpenPanel);
         var capture = Add("截图翻译", "\uE722", model.StartCapture);
         menu.Items.Add(new ToolStripSeparator());
@@ -47,6 +57,10 @@ public static class TrayMenu
             var shortcut = model.Settings.CaptureShortcut;
             capture.ShortcutKeyDisplayString = shortcut is { } value
                 ? value.DisplayText.Replace(" " + value.KeyDisplayName, "+" + value.KeyDisplayName.ToUpperInvariant()).Replace(" ", "+") : "";
+            installUpdate.Visible = model.Updates.CanInstallNow;
+            installSeparator.Visible = installUpdate.Visible;
+            installUpdate.Text = model.Updates.AvailableVersion is { Length: > 0 } version
+                ? "安装更新 " + version : "安装更新";
             menu.BackColor = Theme("PanelBackground");
             menu.ForeColor = Theme("Ink");
             foreach (ToolStripItem item in menu.Items)
@@ -60,7 +74,7 @@ public static class TrayMenu
         // Each menu owns its generated images and font.
         foreach (ToolStripItem item in menu.Items)
             if (item.Image != null) item.Tag = item.Text switch
-            { "显示面板" => "\uE8A7", "截图翻译" => "\uE722", "设置" => "\uE713", _ => "\uE8BB" };
+            { "显示面板" => "\uE8A7", "截图翻译" => "\uE722", "设置" => "\uE713", "安装更新" => "\uE896", _ => "\uE8BB" };
         menu.Disposed += (_, _) => { foreach (var image in images.Values) image.Dispose(); ownedFont.Dispose(); };
         return menu;
     }

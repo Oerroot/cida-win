@@ -23,6 +23,8 @@ jobs:
         run: dotnet run --project tests/Cida.VisualChecks --configuration Release -- --check-control-surfaces
       - name: Native panel caption hit tests
         run: dotnet run --project tests/Cida.VisualChecks --configuration Release --no-build -- --check-panel-chrome
+      - name: Upstream sync recovery regression
+        run: dotnet run --project tests/Cida.VisualChecks --configuration Release --no-build -- --check-sync-recovery
 
   package:
     needs: test

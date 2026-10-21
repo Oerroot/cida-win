@@ -9,7 +9,8 @@
                     <TextBlock Text="模型服务" FontSize="18" FontWeight="SemiBold"/>
                     <TextBlock x:Name="ModelSummary" Foreground="{DynamicResource InkSecondary}" FontSize="13" Margin="0,8,0,16" TextWrapping="Wrap"/>
                     <TextBlock Text="使用你自己的模型服务。所有处理请求直接发送到下面的端点。" Foreground="{DynamicResource InkSecondary}" FontSize="13" TextWrapping="Wrap"/>
-                    <Button Content="复制 AI 配置说明" Click="OnCopyConfiguration" HorizontalAlignment="Left" Foreground="{DynamicResource Accent}" Margin="0,10,0,16"/>
+                    <Button Content="复制 AI 配置说明" Click="OnCopyConfiguration" HorizontalAlignment="Left" Foreground="{DynamicResource Accent}" Margin="0,10,0,8"/>
+                    <TextBlock Text="配置说明会带上当前配置与最近一次失败类别；不包含 API Key、原文或输出。" Foreground="{DynamicResource InkSecondary}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,16"/>
                     <Expander Header="手工配置" IsExpanded="True">
                         <StackPanel Margin="0,14,0,0">
                             <TextBlock Text="完整端点地址" Margin="0,0,0,6"/><TextBox x:Name="Endpoint" AutomationProperties.Name="完整端点地址"/>
@@ -41,28 +42,47 @@
             </TabItem>
             <TabItem Header="动作">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,0,12,12">
-                    <TextBlock Text="选择文字后，执行第一个启用的动作。" Foreground="{DynamicResource InkSecondary}" FontSize="13" TextWrapping="Wrap" Margin="0,0,0,14"/>
+                    <TextBlock Text="选择文字后，执行第一个启用的动作；不修改提示词也可以直接用固定样例试运行。" Foreground="{DynamicResource InkSecondary}" FontSize="13" TextWrapping="Wrap" Margin="0,0,0,14"/>
                     <ListBox x:Name="ActionsList" Height="140" DisplayMemberPath="Name" SelectionChanged="OnActionSelection" Background="{DynamicResource PanelBackground}" Foreground="{DynamicResource Ink}" BorderBrush="{DynamicResource PanelBorder}" Padding="4">
                         <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}"><Setter Property="AutomationProperties.Name" Value="{Binding Name}"/></Style></ListBox.ItemContainerStyle>
                     </ListBox>
-                    <StackPanel Orientation="Horizontal" Margin="0,8,0,20"><Button Content="新增" Click="OnAddAction"/><Button Content="上移" Click="OnMoveUp"/><Button Content="下移" Click="OnMoveDown"/><Button x:Name="DeleteAction" Content="删除" Click="OnDeleteAction"/></StackPanel>
-                    <TextBlock Text="名称" Margin="0,0,0,6"/><TextBox x:Name="ActionName" TextChanged="OnActionEdited"/>
+                    <StackPanel x:Name="ActionListButtons" Orientation="Horizontal" Margin="0,8,0,20"><Button Content="新增" Click="OnAddAction"/><Button Content="上移" Click="OnMoveUp"/><Button Content="下移" Click="OnMoveDown"/><Button x:Name="DeleteAction" Content="删除" Click="OnDeleteAction"/></StackPanel>
+                    <TextBlock Text="名称" Margin="0,0,0,6"/><TextBox x:Name="ActionName" TextChanged="OnActionEdited" AutomationProperties.Name="动作名称"/>
                     <CheckBox x:Name="ActionEnabled" Content="在面板中显示" Margin="0,12,0,16" Checked="OnActionToggled" Unchecked="OnActionToggled"/>
-                    <TextBlock Text="提示词" Margin="0,0,0,6"/><TextBox x:Name="ActionPrompt" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="100" MaxHeight="170" VerticalScrollBarVisibility="Auto" TextChanged="OnActionEdited"/>
-                    <Button Content="恢复内置提示词" x:Name="ResetPrompt" Click="OnResetPrompt" HorizontalAlignment="Left" Margin="0,10,0,12"/>
-                    <StackPanel Orientation="Horizontal"><Button x:Name="PreviewButton" Content="用当前草稿模型预览" Click="OnPreview" BorderThickness="1"/><Button x:Name="CancelPreview" Content="停止预览" Click="OnCancelPreview" Visibility="Collapsed"/></StackPanel>
-                    <TextBlock Text="固定样本：This sentence need to be more clear and natural." FontSize="12" Foreground="{DynamicResource InkSecondary}" Margin="0,10,0,8" TextWrapping="Wrap"/>
-                    <TextBox x:Name="PreviewResult" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="200" VerticalScrollBarVisibility="Auto"/>
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock x:Name="ActionPromptTitle" Text="提示词 · 已保存" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button x:Name="DiscardAction" Content="放弃修改" Click="OnDiscardAction" Margin="0,0,8,0" Visibility="Collapsed"/>
+                            <Button x:Name="ResetPrompt" Content="恢复内置提示词" Click="OnResetPrompt" Margin="0"/>
+                        </StackPanel>
+                    </Grid>
+                    <TextBox x:Name="ActionPrompt" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="100" MaxHeight="170" VerticalScrollBarVisibility="Auto" TextChanged="OnActionEdited" AutomationProperties.Name="动作提示词"/>
+                    <TextBlock x:Name="ActionEditHint" Foreground="{DynamicResource InkSecondary}" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0" VerticalAlignment="Center">
+                        <Button x:Name="PreviewButton" Content="试运行" Click="OnPreview" BorderThickness="1"/>
+                        <Button x:Name="CancelPreview" Content="停止" Click="OnCancelPreview" Visibility="Collapsed"/>
+                        <Button x:Name="ModelSettingsButton" Content="模型设置" Click="OnModelSettings" Foreground="{DynamicResource Accent}" Visibility="Collapsed"/>
+                        <TextBlock x:Name="PreviewKeyHint" Text="Ctrl+Enter" FontSize="12" Foreground="{DynamicResource InkHint}" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                    </StackPanel>
+                    <TextBlock Text="固定样本：This sentence need to be more clear and natural." FontSize="12" Foreground="{DynamicResource InkSecondary}" Margin="0,12,0,8" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="PreviewStatus" FontSize="13" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                    <TextBlock x:Name="PreviewFailure" FontSize="13" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap" Margin="0,0,0,8" Visibility="Collapsed"/>
+                    <TextBox x:Name="PreviewResult" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="200" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" AutomationProperties.Name="试运行结果"/>
+                    <TextBlock x:Name="PreviewReferenceLabel" FontSize="12" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap" Margin="0,12,0,6" Visibility="Collapsed"/>
+                    <TextBox x:Name="PreviewReference" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" Foreground="{DynamicResource InkSecondary}" MinHeight="70" MaxHeight="160" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" AutomationProperties.Name="参照结果"/>
                 </StackPanel></ScrollViewer>
             </TabItem>
             <TabItem Header="快捷键">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,0,12,12">
-                    <TextBlock Text="直接按下组合键录入；Backspace 清除。" FontSize="13" Foreground="{DynamicResource InkSecondary}" Margin="0,0,0,20" TextWrapping="Wrap"/>
+                    <TextBlock Text="点一下组合键框，直接按下新的组合；Backspace 清除。" FontSize="13" Foreground="{DynamicResource InkSecondary}" Margin="0,0,0,16" TextWrapping="Wrap"/>
                     <Grid x:Name="ShortcutRows"/>
                     <TextBlock x:Name="ShortcutStatus" FontSize="13" Foreground="{DynamicResource Error}" TextWrapping="Wrap" Margin="0,14,0,0"/>
                     <Button Content="恢复默认快捷键" Click="OnResetShortcuts" HorizontalAlignment="Left" Margin="0,14,0,0"/>
+                    <TextBlock Text="在 Windows 上如何工作" FontSize="18" FontWeight="SemiBold" Margin="0,30,0,10"/>
+                    <TextBlock x:Name="ShortcutCapabilities" FontSize="13" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap"/>
                     <TextBlock Text="面板内" FontSize="18" FontWeight="SemiBold" Margin="0,30,0,14"/>
-                    <TextBlock Text="Enter 执行　Shift+Enter 换行&#10;Tab 切换动作　Esc 隐藏&#10;Ctrl+. 停止　Ctrl+L 修改常用外语&#10;Ctrl+C 复制　Ctrl+Shift+C 复制图片&#10;Ctrl+, 打开设置" FontSize="14" TextBlock.LineHeight="30" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="PanelKeys" Text="Enter 执行　Shift+Enter 换行&#10;Tab 切换动作　Esc 隐藏&#10;Ctrl+. 停止　Ctrl+L 修改常用外语&#10;Ctrl+C 复制　Ctrl+Shift+C 复制图片&#10;Ctrl+, 打开设置" FontSize="14" TextBlock.LineHeight="30" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap"/>
                 </StackPanel></ScrollViewer>
             </TabItem>
             <TabItem Header="通用">
@@ -70,8 +90,20 @@
                     <CheckBox x:Name="LaunchAtLogin" Content="登录 Windows 时启动辞达"/>
                     <Separator Margin="0,22,0,22" Background="{DynamicResource PanelBorder}"/>
                     <TextBlock Text="更新" FontSize="18" FontWeight="SemiBold"/>
-                    <TextBlock x:Name="UpdateStatus" FontSize="13" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap" Margin="0,10,0,12"/>
-                    <WrapPanel><Button Content="检查更新" Click="OnUpdateCheck" BorderThickness="1"/><Button x:Name="DownloadUpdate" Content="下载更新" Click="OnDownloadUpdate" Margin="8,0,0,0"/><Button x:Name="CancelDownload" Content="取消下载" Click="OnCancelDownload"/><Button x:Name="RestartUpdate" Content="重启安装" Click="OnRestartUpdate"/><Button Content="打开下载页" Click="OnReleases"/></WrapPanel>
+                    <TextBlock x:Name="UpdateStatus" FontSize="13" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap" Margin="0,10,0,8"/>
+                    <TextBlock x:Name="UpdateNotes" FontSize="13" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap" Margin="0,0,0,8" Visibility="Collapsed"/>
+                    <TextBlock x:Name="UpdateHint" FontSize="12" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap" Margin="0,0,0,8" Visibility="Collapsed"/>
+                    <ProgressBar x:Name="UpdateProgress" Height="6" MinHeight="6" Minimum="0" Maximum="100" Value="0" Foreground="{DynamicResource Accent}" Background="{DynamicResource AccentSoft}" BorderThickness="0" Margin="0,0,0,10" Visibility="Collapsed"/>
+                    <TextBlock x:Name="UpdateDeferredNote" FontSize="13" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap" Margin="0,0,0,10" Visibility="Collapsed" Text="已下载更新。离开设置页后不会自动重启；可以在这里安装，或从托盘菜单安装。"/>
+                    <WrapPanel>
+                        <Button x:Name="CheckUpdate" Content="检查更新" Click="OnUpdateCheck" BorderThickness="1"/>
+                        <Button x:Name="DownloadUpdate" Content="安装并重启" Style="{StaticResource PrimaryButton}" Click="OnInstallUpdate" Visibility="Collapsed"/>
+                        <Button x:Name="RestartUpdate" Content="安装并重启" Style="{StaticResource PrimaryButton}" Click="OnInstallUpdate" Visibility="Collapsed"/>
+                        <Button x:Name="UpdateLater" Content="稍后" Click="OnUpdateLater" Visibility="Collapsed"/>
+                        <Button x:Name="SkipUpdate" Content="跳过这个版本" Foreground="{DynamicResource InkSecondary}" BorderThickness="0" Background="Transparent" Click="OnSkipUpdate" Visibility="Collapsed"/>
+                        <Button x:Name="CancelDownload" Content="取消下载" Click="OnCancelDownload" Visibility="Collapsed"/>
+                        <Button x:Name="OpenReleases" Content="打开下载页" Click="OnReleases"/>
+                    </WrapPanel>
                     <Separator Margin="0,22,0,22" Background="{DynamicResource PanelBorder}"/>
                     <TextBlock Text="本地能力" FontSize="18" FontWeight="SemiBold"/>
                     <TextBlock x:Name="Capabilities" Foreground="{DynamicResource InkSecondary}" FontSize="13" TextWrapping="Wrap" Margin="0,10,0,14"/>
