@@ -84,6 +84,11 @@ public sealed class AppModel
         ApplyShortcuts();
         ListenForConfigurationChanges();
         WarmUpOcr();
+        // The Settings page owns the "once confirmed, install and restart" flow (#79): it
+        // reports visibility through SetWatched and this hook stops panel work right before
+        // the updater replaces the build.
+        Updates.PrepareForRestart = PrepareForUpdate;
+        Updates.SetWatched(false);
         _ = Updates.CheckDailyAsync();
         if (!_settings.IsModelServiceComplete) ShowPanel(readSelection: false);
         DevelopmentTrace.Stage("start complete modelConfigured=" + _settings.IsModelServiceComplete);
@@ -305,17 +310,26 @@ public sealed class AppModel
 
     public ConfigurationStore Store => _store;
 
-    /// <summary>Sends a processing request and streams the reply to the panel.</summary>
+    /// <summary>
+    /// Sends a processing request and streams the reply to the panel. Length rejections are
+    /// recovered by <see cref="ModelServiceSegmentation.SendRecoveringLengthAsync"/> (#73), and a
+    /// failure ends the result with safe recovery information instead of provider text.
+    /// </summary>
     public async void Submit(PanelWindow panel, string text, ProcessingAction action)
     {
         var serial = ++_resultSerial;
         panel.BeginResult(action, text);
-        if (!_settings.IsModelServiceComplete)
+        // A new request owns the recovery state; the previous failure must not outlive it.
+        LastPanelFailure = null;
+        var settings = _settings;
+        if (!settings.IsModelServiceComplete)
         {
-            panel.FailResult("请先打开设置，配置模型服务。");
+            var failure = new ProcessingFailure(
+                ProcessingFailureCategory.Configuration, settings.ModelService.Model, settings.ModelServiceFingerprint);
+            LastPanelFailure = failure;
+            panel.FailResult(failure, "请先打开设置，配置模型服务。");
             return;
         }
-        var settings = _settings;
         var languages = settings.RequestLanguages();
         var request = new ProcessingRequest
         {
@@ -329,12 +343,10 @@ public sealed class AppModel
         panel.BindCancellation(cancellation);
         try
         {
-            var prepared = ModelServiceClient.Prepare(request, settings);
-            await _client.SendAsync(
-                prepared,
-                settings.ModelService.Format,
-                new SecretRedactor(settings.ApiKey),
-                null,
+            await ModelServiceSegmentation.SendRecoveringLengthAsync(
+                _client,
+                request,
+                settings,
                 piece => Dispatcher.BeginInvoke(() =>
                 {
                     if (serial == _resultSerial && !cancellation.IsCancellationRequested) panel.AppendResult(piece);
@@ -347,9 +359,12 @@ public sealed class AppModel
         }
         catch (ModelServiceException error)
         {
+            var failure = ProcessingFailure.From(error, settings);
             await Dispatcher.InvokeAsync(() =>
             {
-                if (serial == _resultSerial) panel.FailResult(error.Error.Description());
+                if (serial != _resultSerial) return;
+                LastPanelFailure = failure;
+                panel.FailResult(failure);
             });
         }
         catch (OperationCanceledException)
@@ -361,7 +376,15 @@ public sealed class AppModel
         }
         catch (Exception)
         {
-            if (serial == _resultSerial) panel.FailResult("请求未能完成，请检查连接后重试。");
+            // Anything unrecognized is recoverable, but it is not safe to show its prose.
+            var failure = new ProcessingFailure(
+                ProcessingFailureCategory.Unknown, settings.ModelService.Model, settings.ModelServiceFingerprint);
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (serial != _resultSerial) return;
+                LastPanelFailure = failure;
+                panel.FailResult(failure, "请求未能完成，请检查连接后重试。");
+            });
         }
         finally { panel.UnbindCancellation(cancellation); cancellation.Dispose(); }
     }

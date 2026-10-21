@@ -27,7 +27,7 @@
             </Border>
             <Border Grid.Row="3" Background="{DynamicResource Paper}" CornerRadius="0,0,14,14">
                 <Grid Margin="28,18,28,22">
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock x:Name="ResultTitle" Text="译文" FontSize="12" Foreground="{DynamicResource InkSecondary}"/><TextBlock x:Name="PhaseLabel" Margin="12,0,0,0" FontSize="12" Foreground="{DynamicResource InkSecondary}"/></StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal"><Button x:Name="CopyButton" Content="复制" Click="OnCopy" ToolTip="复制 · Ctrl+C" IsEnabled="False"/><Button x:Name="ImageButton" Content="复制图片" Click="OnCopyImage" ToolTip="复制图片 · Ctrl+Shift+C" IsEnabled="False" Margin="0"/></StackPanel>
@@ -37,7 +37,8 @@
                             <FlowDocument PagePadding="0" LineHeight="30"/></RichTextBox>
                         <StackPanel x:Name="EmptyResult" VerticalAlignment="Center"><TextBlock x:Name="EmptyTitle" Text="让文字，清楚地抵达。" FontFamily="{DynamicResource ReadingFont}" FontSize="24" Foreground="{DynamicResource InkSecondary}"/><TextBlock x:Name="EmptyHint" Text="输入后按 Enter 执行 · Tab 切换动作" FontSize="13" Foreground="{DynamicResource InkSecondary}" Margin="0,12,0,0" TextWrapping="Wrap"/><Button x:Name="ConfigureButton" Content="配置模型服务" HorizontalAlignment="Left" Margin="0,18,0,0" Click="OnSettings" Foreground="{DynamicResource Accent}" Visibility="Collapsed"/></StackPanel>
                     </Grid>
-                    <Grid Grid.Row="2" Margin="0,16,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock x:Name="FailureExplanation" Grid.Row="2" Margin="0,14,0,0" FontSize="13" LineHeight="20" MaxHeight="40" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap" Visibility="Collapsed" AutomationProperties.Name="失败说明"/>
+                    <Grid Grid.Row="3" Margin="0,16,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <TextBlock x:Name="Note" FontSize="12" Foreground="{DynamicResource InkSecondary}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                         <Button x:Name="RetryCapture" Grid.Column="1" Content="重新截图" Click="OnRetryCapture" Visibility="Collapsed"/>
                     </Grid>
