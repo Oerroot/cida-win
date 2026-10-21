@@ -75,6 +75,10 @@ public sealed class UpdateService
     /// <summary>Compatibility: a download is running.</summary>
     public bool IsDownloading => _downloadCancellation != null;
 
+    /// <summary>The reported download progress (0-100) while downloading, for a determinate bar.</summary>
+    public int? DownloadPercent =>
+        _session.Phase == UpdatePhase.Downloading ? _session.DownloadPercent : null;
+
     /// <summary>Notified after every state change.</summary>
     public event Action? Changed;
 

@@ -172,6 +172,7 @@ public static class GlobalShortcutActionExtensions
         GlobalShortcutAction.ShowPanel => GlobalShortcut.AltA,
         GlobalShortcutAction.CaptureText => GlobalShortcut.AltS,
         GlobalShortcutAction.TranslationLayer => GlobalShortcut.AltD,
+        GlobalShortcutAction.ImproveAndReplace => GlobalShortcut.AltF,
         _ => throw new ArgumentOutOfRangeException(nameof(action)),
     };
 }
