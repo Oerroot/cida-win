@@ -279,6 +279,7 @@ public sealed class AppModel
     // MARK: requests
 
     public CidaSettings Settings => _settings;
+    public event Action? SettingsChanged;
 
     public void ReloadSettings()
     {
@@ -288,6 +289,7 @@ public sealed class AppModel
         _layerSession?.Dispose();
         _layerOverlay?.Close(); _layerOverlay = null;
         _layerCancellation?.Cancel();
+        SettingsChanged?.Invoke();
     }
     public void SaveSettings(CidaSettings settings)
     {

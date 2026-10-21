@@ -23,6 +23,7 @@ public partial class SettingsWindow : Window
     private bool _loadingAction;
     private int _editing = -1;
     private CancellationTokenSource? _checkCancellation;
+    private ModelServiceCheckRecord? _lastCheck;
     private bool _closed;
     private string? _actionNotice;
     private volatile bool _actionRefreshPending;
@@ -61,7 +62,11 @@ public partial class SettingsWindow : Window
         if (initialPage >= 0 && initialPage < Pages.Items.Count) Pages.SelectedIndex = initialPage;
         _model.Updates.Changed += OnUpdatesChanged;
         _model.ActionEditor.Changed += OnActionEditorChanged;
-        _model.Updates.SetWatched(true);
+        _model.SettingsChanged += OnActionEditorChanged;
+        Pages.SelectionChanged += (_, e) => { if (ReferenceEquals(e.OriginalSource, Pages)) RefreshUpdateWatch(); };
+        IsVisibleChanged += (_, _) => RefreshUpdateWatch();
+        StateChanged += (_, _) => RefreshUpdateWatch();
+        RefreshUpdateWatch();
         RefreshActionPage();
         Closed += (_, _) =>
         {
@@ -69,6 +74,7 @@ public partial class SettingsWindow : Window
             _checkCancellation?.Cancel();
             _model.Updates.Changed -= OnUpdatesChanged;
             _model.ActionEditor.Changed -= OnActionEditorChanged;
+            _model.SettingsChanged -= OnActionEditorChanged;
             _model.Updates.SetWatched(false);
         };
         PreviewKeyDown += OnWindowPreviewKeyDown;
@@ -157,6 +163,15 @@ public partial class SettingsWindow : Window
             CheckStatus.Text = "正在检查草稿配置…";
             var result = await ModelServiceCheck.RunAsync(draft, cancellationToken: _checkCancellation.Token);
             if (_closed) return;
+            if (_checkCancellation.IsCancellationRequested) { CheckStatus.Text = "检查已取消"; return; }
+            _lastCheck = result.Record;
+            // Draft checks must not diagnose the saved configuration. Keep them local until
+            // that fingerprint is current; cancelled checks are never recorded.
+            var previousCheck = _model.Store.LoadLastCheck();
+            if (draft.ModelServiceFingerprint == _model.Settings.ModelServiceFingerprint
+                && (previousCheck?.Fingerprint != draft.ModelServiceFingerprint
+                    || previousCheck.CheckedAt.ToUniversalTime() <= result.Record.CheckedAt.ToUniversalTime()))
+                _model.Store.SaveLastCheck(result.Record);
             CheckStatus.Text = result.Passed ? "连接成功 · " + result.Model : "检查失败 · " + (result.Failure?.Reason() ?? "已取消或未配置完整");
         }
         catch (OperationCanceledException) { CheckStatus.Text = "检查已取消"; }
@@ -172,13 +187,23 @@ public partial class SettingsWindow : Window
             // The handoff follows the current task (#74): a panel request failure and the selected
             // action's trial failure are distinct contexts, and failures of an older configuration
             // are filtered out by ConfigurationPromptBuilder itself.
-            var editor = _model.ActionEditor;
-            var previewFailure = editor.Attempts.TryGetValue(editor.SelectedId, out var attempt) ? attempt.Failure : null;
-            var prompt = ConfigurationPromptBuilder.Build(_model.Settings, null, _model.LastPanelFailure, previewFailure);
-            System.Windows.Clipboard.SetText(prompt);
+            System.Windows.Clipboard.SetText(ConfigurationPrompt());
             SaveStatus.Text = "配置说明已复制，可交给 AI 助手。";
         }
         catch { SaveStatus.Text = "剪贴板正忙，请重试。"; }
+    }
+
+    private string ConfigurationPrompt()
+    {
+        var settings = _model.Settings;
+        var lastCheck = _model.Store.LoadLastCheck();
+        if (_lastCheck is { } local && local.Fingerprint == settings.ModelServiceFingerprint
+            && (lastCheck?.Fingerprint != settings.ModelServiceFingerprint
+                || local.CheckedAt.ToUniversalTime() > lastCheck.CheckedAt.ToUniversalTime()))
+            lastCheck = local;
+        var editor = _model.ActionEditor;
+        var previewFailure = editor.Attempts.TryGetValue(editor.SelectedId, out var attempt) ? attempt.Failure : null;
+        return ConfigurationPromptBuilder.Build(settings, lastCheck, _model.LastPanelFailure, previewFailure);
     }
 
     // MARK: actions (#74)
@@ -273,8 +298,13 @@ public partial class SettingsWindow : Window
         {
             _actionNotice = "提示词有未保存的修改：试运行使用已保存的版本，先放弃修改或保存设置。"; RefreshActionPage(); return;
         }
+        var settings = _model.Settings;
+        if (!Equals(settings.EffectiveActions.FirstOrDefault(candidate => candidate.Id == action.Id), action))
+        {
+            _actionNotice = "动作已被其他入口修改，请重新打开设置后试运行。"; RefreshActionPage(); return;
+        }
         editor.Select(action.Id);
-        editor.TrySavedAction(_baseline);
+        editor.TrySavedAction(settings);
         RefreshActionPage();
     }
     private void OnCancelPreview(object sender, RoutedEventArgs e) => _model.ActionEditor.StopPreview();
@@ -304,10 +334,13 @@ public partial class SettingsWindow : Window
         var preview = editor.Previews.TryGetValue(action.Id, out var foundPreview) ? foundPreview : null;
         var saved = _baseline.EffectiveActions.FirstOrDefault(candidate => candidate.Id == action.Id);
         var dirty = saved == null || !Equals(saved, action);
+        var settings = _model.Settings;
+        var currentSaved = settings.EffectiveActions.FirstOrDefault(candidate => candidate.Id == action.Id);
+        var savedActionChanged = !Equals(saved, currentSaved);
         var anyRunning = editor.IsRunning;
         var running = anyRunning && editor.SelectedId == action.Id;
-        var needsConfiguration = saved != null && editor.NeedsConfiguration(_baseline);
-        var stale = preview != null && saved != null && !preview.Matches(saved, _baseline);
+        var needsConfiguration = currentSaved != null && editor.NeedsConfiguration(settings);
+        var stale = preview != null && (currentSaved == null || !preview.Matches(currentSaved, settings));
         var failure = attempt?.Failure;
 
         // A running trial locks the list and the editor; browsing or changing the prompt mid-run
@@ -328,7 +361,7 @@ public partial class SettingsWindow : Window
             : "提示词有未保存的修改：试运行使用已保存的版本，先放弃修改或保存设置。";
         ActionEditHint.Visibility = dirty ? Visibility.Visible : Visibility.Collapsed;
 
-        var canTrial = !dirty && saved != null && !anyRunning && !needsConfiguration;
+        var canTrial = !dirty && saved != null && !savedActionChanged && !anyRunning && !needsConfiguration;
         PreviewButton.Visibility = needsConfiguration ? Visibility.Collapsed : Visibility.Visible;
         ModelSettingsButton.Visibility = needsConfiguration ? Visibility.Visible : Visibility.Collapsed;
         PreviewButton.IsEnabled = canTrial;
@@ -355,6 +388,7 @@ public partial class SettingsWindow : Window
         }
         else if (preview == null) status = "还没有运行过。用已保存的提示词处理上面的样例。";
         else status = stale ? "上一版提示词或配置的结果 · 已过期" : "已保存版本的结果";
+        if (savedActionChanged) status = "动作已被其他入口修改，请重新打开设置后试运行。";
         if (!string.IsNullOrEmpty(_actionNotice)) status = _actionNotice;
         PreviewStatus.Text = status;
 
@@ -496,6 +530,9 @@ public partial class SettingsWindow : Window
     }
 
     // MARK: updates (#79)
+
+    private void RefreshUpdateWatch() => _model.Updates.SetWatched(
+        !_closed && IsVisible && WindowState != WindowState.Minimized && Pages.SelectedIndex == 3);
 
     private void OnUpdatesChanged() { if (!_closed) Dispatcher.BeginInvoke(new Action(RefreshUpdates)); }
     private void RefreshUpdates()

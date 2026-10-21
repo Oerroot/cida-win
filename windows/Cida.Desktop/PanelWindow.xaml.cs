@@ -30,6 +30,7 @@ public partial class PanelWindow : Window
     private ProcessingAction? _retainedAction;
     private string _imageTitle = "译文";
     private string? _failureMessage;
+    private string? _submittedActionPrompt;
     private IReadOnlyList<ProcessingAction> DisplayedActions => _retainedAction != null && _model.Settings.EnabledActions.All(a => a.Id != _retainedAction.Id)
         ? _model.Settings.EnabledActions.Append(_retainedAction).ToArray() : _model.Settings.EnabledActions;
     private DateTime _shownAt;
@@ -187,6 +188,7 @@ public partial class PanelWindow : Window
     {
         _cancellation?.Cancel();
         _stateSerial = State.Begin(source, action.Id, _model.RequestFingerprint(action));
+        _submittedActionPrompt = action.Prompt;
         _failureMessage = null;
         _imageTitle = action.Id == ProcessingAction.TranslationId ? "译文" : action.Name + "结果";
         _rendered = ""; _formatted = false; ResultView.Document.Blocks.Clear(); RetryCapture.Visibility = Visibility.Collapsed;
@@ -277,7 +279,8 @@ public partial class PanelWindow : Window
         {
             IsProcessing = State.Phase == ResultPhase.Streaming,
             IsRecognizing = _recognizing,
-            IsStale = State.IsStale,
+            IsStale = State.IsStale || (_submittedActionPrompt != null
+                && DisplayedActions.FirstOrDefault(action => action.Id == State.ActionId)?.Prompt != _submittedActionPrompt),
             HasSubmittableInput = !string.IsNullOrWhiteSpace(Composer.Text),
             Phase = State.Phase,
             Failure = State.Failure,
@@ -301,7 +304,7 @@ public partial class PanelWindow : Window
         var changedConfig = submitted != null && State.SubmittedConfiguration != _model.RequestFingerprint(submitted);
         Note.SetResourceReference(TextBlock.ForegroundProperty, State.Phase == ResultPhase.Failed ? "Error" : "InkSecondary");
         Note.Text = State.Failure != null ? _failureMessage ?? ""
-            : State.IsStale ? State.StaleReason + " · Enter 重新生成"
+            : input.IsStale ? State.StaleReason + " · Enter 重新生成"
             : changedConfig ? "语言或配置已改变 · Enter 重新生成"
             : State.Phase == ResultPhase.Failed ? "请求失败：" + State.Error + " · 可重新生成"
             : State.Phase == ResultPhase.Stopped ? "已停止，已有结果已保留。"

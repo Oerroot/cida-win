@@ -130,8 +130,8 @@ public sealed class LayerSession : IDisposable
                     MyLanguage = target, ForeignLanguage = settings.RequestLanguages().Foreign,
                 };
                 var result = new System.Text.StringBuilder();
-                await new ModelServiceClient().SendAsync(ModelServiceClient.Prepare(request, settings), settings.ModelService.Format,
-                    new SecretRedactor(settings.ApiKey), null, piece => result.Append(piece), _cancellation.Token);
+                await ModelServiceSegmentation.SendRecoveringLengthAsync(
+                    new ModelServiceClient(), request, settings, piece => result.Append(piece), _cancellation.Token);
                 parsed = string.IsNullOrWhiteSpace(result.ToString())
                     ? null
                     : new Dictionary<int, string> { [0] = result.ToString().Trim() };
