@@ -12,3 +12,6 @@ windows/Cida.Desktop/SparsePackage/build/identity-files.txt
 # IDE
 .idea/
 *.swp
+
+# WPF markup-compile temp project files
+*_wpftmp.csproj
