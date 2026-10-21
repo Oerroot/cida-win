@@ -41,6 +41,29 @@ public sealed class AppModel
     private CancellationTokenSource? _recognitionCancellation;
     public bool IsSettingsVisible => _settingsWindow?.IsVisible == true;
     public UpdateService Updates { get; } = new();
+
+    /// <summary>
+    /// Settings' saved-action trial engine (#74). It lives on the model so a reference result
+    /// survives closing and reopening Settings. Trials always use the saved configuration.
+    /// </summary>
+    public ActionEditor ActionEditor { get; } = new(RunActionTrialAsync);
+
+    /// <summary>
+    /// The last panel request's recovery information (#73); Settings passes it to the
+    /// configuration handoff so a request failure is not mistaken for a connection check.
+    /// </summary>
+    public ProcessingFailure? LastPanelFailure { get; private set; }
+
+    private static Task RunActionTrialAsync(
+        ProcessingRequest request, CidaSettings settings, Action<string> onText, CancellationToken cancellationToken) =>
+        new ModelServiceClient().SendAsync(
+            ModelServiceClient.Prepare(request, settings),
+            settings.ModelService.Format,
+            new SecretRedactor(settings.ApiKey),
+            null,
+            onText,
+            cancellationToken);
+
     private readonly List<string> _hotkeyFailures = [];
     public IReadOnlyList<string> HotkeyFailures => _hotkeyFailures;
 
