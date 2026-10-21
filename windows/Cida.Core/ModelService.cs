@@ -643,6 +643,9 @@ public enum ModelServiceError
 
     InvalidRequest,
 
+    /// <summary>A length rejection survived automatic segmentation.</summary>
+    LengthRecoveryExhausted,
+
     /// <summary>A non-2xx status; the body is the provider's text with the key redacted.</summary>
     Http,
 
@@ -668,11 +671,42 @@ public sealed record ModelServiceErrorInfo(
 {
     public int? StatusCode => Kind == ModelServiceError.Http ? Status : null;
 
+    /// <summary>
+    /// True when the provider rejected the request because the input is longer than its
+    /// context window (upstream ModelServiceError.isLengthLimit, #73). Only an explicit 413 or
+    /// a typed 400 body counts; prose alone must never trigger automatic segmentation.
+    /// </summary>
+    public bool IsLengthLimit
+    {
+        get
+        {
+            if (Kind != ModelServiceError.Http || Status is not int status) return false;
+            if (status == 413) return true;
+            if (status != 400) return false;
+            var document = JsonValue.Parse(Body ?? "");
+            if (document == null) return false;
+            var error = document["error"];
+            var code = error?["code"]?.StringValue ?? error?["type"]?.StringValue;
+            if (code is "context_length_exceeded" or "request_too_large") return true;
+            // Anthropic documents this typed 400 response without a separate length error code:
+            // https://platform.claude.com/docs/en/build-with-claude/context-windows
+            if (error?["type"]?.StringValue != "invalid_request_error") return false;
+            var message = error?["message"]?.StringValue?.ToLowerInvariant();
+            if (message == null) return false;
+            return message.StartsWith("prompt is too long", StringComparison.Ordinal)
+                || message.StartsWith("input length and max_tokens exceed context limit", StringComparison.Ordinal)
+                || (message.StartsWith("this model's maximum context length is ", StringComparison.Ordinal)
+                    && message.Contains("tokens", StringComparison.Ordinal)
+                    && message.Contains("requested", StringComparison.Ordinal));
+        }
+    }
+
     /// <summary>The panel's failure note: <c>请求失败：&lt;this&gt; 按 ⏎ 重试</c>.</summary>
     public string Description() => Kind switch
     {
         ModelServiceError.IncompleteConfiguration => "还没配置模型服务，在设置里复制配置提示词交给 AI 助手。",
         ModelServiceError.InvalidRequest => "无法构造模型请求。",
+        ModelServiceError.LengthRecoveryExhausted => "自动分段后仍超出模型服务限制，请检查模型配置和提示词。",
         ModelServiceError.Http => ProviderMessage ?? $"模型服务请求失败（HTTP {Status}）。",
         ModelServiceError.Provider => Message ?? "",
         ModelServiceError.UnexpectedResponse => "模型服务返回了无法识别的响应。",
@@ -687,6 +721,7 @@ public sealed record ModelServiceErrorInfo(
         ModelServiceError.IncompleteConfiguration
             => $"配置还不完整，缺少 {string.Join("、", Missing ?? [])}",
         ModelServiceError.InvalidRequest => "无法构造请求",
+        ModelServiceError.LengthRecoveryExhausted => "自动分段后仍超出模型服务限制",
         ModelServiceError.Http => Status switch
         {
             401 or 403 => "服务商拒绝了 API Key",
