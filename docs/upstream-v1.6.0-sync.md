@@ -166,6 +166,6 @@ Windows 移植此前已经包含 `473013c` 及之前的 #69–#72（首次使用
 - 同步后评审修复与定向验证：[upstream-v1.6.0-review-fixes.md](upstream-v1.6.0-review-fixes.md)
 - 上游 v1.6.0 发布说明：[Xuanwo/cida docs/releases/1.6.0.md](https://github.com/Xuanwo/cida/blob/v1.6.0/docs/releases/1.6.0.md)
 - 本轮候选版说明：[v0.2.0-rc.7](releases/v0.2.0-rc.7.md)
-- Windows 体验重构方案与范围：[windows-experience-plan.md](windows-experience-plan.md)
-- 当前与历史的 Windows 验证记录：[verification.md](verification.md)、[windows-experience-verification.md](windows-experience-verification.md)
+- Windows 体验重构方案与范围：[windows-experience-plan.md](plans/windows-experience-plan.md)
+- 当前与历史的 Windows 验证记录：[verification.md](verification/verification.md)、[windows-experience-verification.md](verification/windows-experience-verification.md)
 - 品牌与字体来源：[NOTICE](../NOTICE)

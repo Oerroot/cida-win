@@ -89,7 +89,7 @@ pwsh -File scripts/package.ps1 -Version 0.2.0-rc.7
 
 打包依赖 vpk 1.2.161 与具有合法再分发权的 Visual Studio VC runtime 文件。脚本核验 Microsoft 签名后应用本地部署运行库，检查候选包不包含私钥、证书或 MSIX，并拒绝覆盖已有版本输出。
 
-本轮上游 v1.6.0 同步范围、Windows 映射与验证记录见 [上游 v1.6.0 同步记录](docs/upstream-v1.6.0-sync.md)，候选版说明见 [rc.7 发布说明](docs/releases/v0.2.0-rc.7.md)。按钮边缘修复证据见 [rc.5 验证记录](docs/windows-control-surface-verification.md)，主面板拖动修复证据见 [rc.6 验证记录](docs/windows-panel-drag-verification.md)，渲染及拖动修复证据见 [rc.4 验证记录](docs/windows-rendering-verification.md)，图标/控件修复见 [rc.3 记录](docs/windows-ui-polish-verification.md)，完整体验见 [rc.2 验证记录](docs/windows-experience-verification.md)。代码实现、受控渲染、真实窗口交互、干净机器安装与正式签名分别记录。完整中文 IME 候选提交、外部应用矩阵、混合 DPI 多屏、干净系统安装/升级/卸载仍不作为本候选版已通过的项目。
+本轮上游 v1.6.0 同步范围、Windows 映射与验证记录见 [上游 v1.6.0 同步记录](docs/upstream-v1.6.0-sync.md)，候选版说明见 [rc.7 发布说明](docs/releases/v0.2.0-rc.7.md)。按钮边缘修复证据见 [rc.5 验证记录](docs/verification/windows-control-surface-verification.md)，主面板拖动修复证据见 [rc.6 验证记录](docs/verification/windows-panel-drag-verification.md)，渲染及拖动修复证据见 [rc.4 验证记录](docs/verification/windows-rendering-verification.md)，图标/控件修复见 [rc.3 记录](docs/verification/windows-ui-polish-verification.md)，完整体验见 [rc.2 验证记录](docs/verification/windows-experience-verification.md)。代码实现、受控渲染、真实窗口交互、干净机器安装与正式签名分别记录。完整中文 IME 候选提交、外部应用矩阵、混合 DPI 多屏、干净系统安装/升级/卸载仍不作为本候选版已通过的项目。
 
 发布流程：添加 `docs/releases/vX.Y.Z[-rc.N].md`，提交后创建新 tag。GitHub Actions 构建、运行非交互测试、生成并上传预发布包；不会改写已有 tag 或替换既有发布附件。
 

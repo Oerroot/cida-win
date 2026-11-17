@@ -33,9 +33,9 @@ Release 构建 0 警告、0 错误；Core **96/96**，交互桌面 Windows **5/5
 
 截图使用本地模拟数据，不包含用户密钥：
 
-- [主面板](screenshots/panel-light.png)
-- [浅色模型设置](screenshots/light-settings-0.png)、[深色模型设置](screenshots/dark-settings-0.png)
-- [浅色托盘菜单](screenshots/light-tray-menu.png)、[深色托盘菜单](screenshots/dark-tray-menu.png)
+- [主面板](../screenshots/panel-light.png)
+- [浅色模型设置](../screenshots/light-settings-0.png)、[深色模型设置](../screenshots/dark-settings-0.png)
+- [浅色托盘菜单](../screenshots/light-tray-menu.png)、[深色托盘菜单](../screenshots/dark-tray-menu.png)
 
 ## 交付与边界
 
