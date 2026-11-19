@@ -40,6 +40,4 @@ dotnet test tests/Cida.Windows.Tests -c Release
 
 ## 协作与交付
 
-- 项目协作按 `C:/Users/ThinkPad/.config/magpie/workflow/RUNBOOK.md`：Codex 主会话制定任务单并调度经 Magpie 接入的执行 Agent。
-- 执行 Agent 只改任务单范围，交回文件清单、真实 diff、命令输出以及失败与未验证项；不自行提交、推送、发布或宣称验收。
-- 独立只读 reviewer 只审查目标、规则、diff、相关源码与未关闭问题，不读执行者自评、不改文件、不批准；主会话核实 findings、组织修复并最终验收和提交。
+- 变更限于授权范围，交付时说明实际改动、验证结果和未验证项。提交、推送与发布遵循当前授权。
